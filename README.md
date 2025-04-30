@@ -54,7 +54,7 @@ git clone https://github.com/votre-nom/kite_PiloteV3.git
 cd kite_PiloteV3
 ```
 
-1. Vérifier que PlatformIO est installé dans VSCode :
+2. Vérifier que PlatformIO est installé dans VSCode :
    - Ouvrir VSCode
    - Aller dans l'onglet Extensions (Ctrl+Shift+X)
    - Rechercher et installer "PlatformIO IDE" si ce n'est pas déjà fait
