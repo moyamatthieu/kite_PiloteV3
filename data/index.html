@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kite PiloteV3 - Interface Web</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0066cc;
+            text-align: center;
+        }
+        .status-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4ff;
+            border-radius: 5px;
+        }
+        .control-panel {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kite PiloteV3</h1>
+        
+        <div class="status-panel">
+            <h2>État du système</h2>
+            <p><strong>Statut:</strong> <span id="system-status">En ligne</span></p>
+            <p><strong>Adresse IP:</strong> <span id="ip-address">--</span></p>
+        </div>
+        
+        <div class="control-panel">
+            <h2>Contrôles</h2>
+            <div>
+                <button id="btn-refresh">Rafraîchir</button>
+                <button id="btn-update">Mise à jour OTA</button>
+                <button id="btn-restart">Redémarrer</button>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Kite PiloteV3 - Interface Web v0.1</p>
+            <p><a href="/update">Accéder à la mise à jour OTA</a></p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Afficher l'adresse IP
+            fetch('/api/info')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('ip-address').textContent = data.ip || 'Non disponible';
+                })
+                .catch(error => console.error('Erreur:', error));
+            
+            // Gestionnaire pour le bouton de rafraîchissement
+            document.getElementById('btn-refresh').addEventListener('click', function() {
+                location.reload();
+            });
+            
+            // Gestionnaire pour le bouton de redémarrage
+            document.getElementById('btn-restart').addEventListener('click', function() {
+                if(confirm('Voulez-vous vraiment redémarrer le système?')) {
+                    fetch('/api/restart', { method: 'POST' })
+                        .then(response => {
+                            alert('Redémarrage en cours...');
+                            setTimeout(() => location.reload(), 5000);
+                        })
+                        .catch(error => console.error('Erreur:', error));
+                }
+            });
+            
+            // Gestionnaire pour le bouton de mise à jour
+            document.getElementById('btn-update').addEventListener('click', function() {
+                window.location.href = '/update';
+            });
+        });
+    </script>
+</body>
+</html>

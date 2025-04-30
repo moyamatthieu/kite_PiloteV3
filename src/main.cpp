@@ -7,7 +7,7 @@
   Ce programme permet le contrôle et la surveillance d'équipements via une interface
   web accessible à distance et un écran OLED pour visualisation locale.
   
-  Version: 1.0.2
+  Version: 1.0.3
   Date: 30 avril 2025
   Auteurs: Équipe Kite PiloteV3
 */
@@ -17,7 +17,9 @@
 #include <AsyncTCP.h>            // Gestion des communications TCP asynchrones
 #include <ESPAsyncWebServer.h>   // Serveur web asynchrone
 #include <ElegantOTA.h>          // Mise à jour OTA (Over The Air)
+#include <SPIFFS.h>              // Système de fichiers SPIFFS
 #include "../include/display.h"  // Module de gestion de l'affichage
+#include "../include/kite_webserver.h" // Module de gestion du serveur web
 
 // === DÉFINITION DES CONSTANTES ===
 
@@ -25,6 +27,9 @@
 const char* WIFI_SSID = "Wokwi-GUEST";      // SSID du réseau WiFi
 const char* WIFI_PASSWORD = "";             // Mot de passe WiFi (vide pour réseau ouvert)
 const uint16_t SERVER_PORT = 80;            // Port du serveur web
+
+// Mode de fonctionnement du serveur web
+const bool USE_SPIFFS_FILES = true;         // true: utilise les fichiers SPIFFS, false: génère le HTML en code
 
 // Pins
 const uint8_t LED_PIN = 2;                  // Pin pour la LED indicatrice
@@ -78,7 +83,7 @@ void setupSerial() {
   // Tests de communication série
   Serial.println("\n\n=============================================");
   Serial.println("Démarrage du système Kite PiloteV3");
-  Serial.println("Version: 1.0.2");
+  Serial.println("Version: 1.0.3");
   Serial.println("=============================================");
   Serial.flush();
 }
@@ -136,13 +141,11 @@ void setupServer() {
   
   display.displayMessage("Système", "Démarrage serveur...");
   
-  // Configuration du serveur web asynchrone
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String response = "Kite PiloteV3 - ESP32\n";
-    response += "Système en marche depuis: " + String(millis() / 1000) + " secondes\n";
-    response += "Mise à jour OTA disponible à /update";
-    request->send(200, "text/plain", response);
-  });
+  // Définition du mode de fonctionnement du serveur web
+  setWebServerMode(USE_SPIFFS_FILES);
+  
+  // Configuration du serveur web asynchrone selon le mode choisi
+  setupServerRoutes(&server);
   
   // Démarrer ElegantOTA et configurer les callbacks
   ElegantOTA.begin(&server);
@@ -153,6 +156,10 @@ void setupServer() {
   // Démarrer le serveur web asynchrone
   server.begin();
   Serial.println("Serveur HTTP démarré sur le port " + String(SERVER_PORT));
+  
+  // Message indiquant le mode de fonctionnement du serveur web
+  String modeMsg = USE_SPIFFS_FILES ? "Mode fichiers SPIFFS" : "Mode génération HTML";
+  Serial.println(modeMsg);
   
   // Affichage final avec l'adresse pour accéder à l'interface OTA
   display.displayMessage("Système", "Prêt!", true);
