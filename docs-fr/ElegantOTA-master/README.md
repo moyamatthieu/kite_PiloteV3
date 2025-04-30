@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://elegantota.pro?ref=ghfeature" target="_blank">
-    <img src="https://raw.githubusercontent.com/ayushsharma82/ElegantOTA/master/docs/feature.png" width="1200"></p>
+    <img src="https://raw.githubusercontent.com/ayushsharma82/ElegantOTA/master/docs/feature.png" width="1200">
   </a>
 </p>
 
@@ -57,6 +57,7 @@ ElegantOTA works on the following microcontrollers/boards:
 <br>
 
 ## Open-Source Preview
+
 *Preview might appear as blurry due to image optimization.*
 <br>
 
@@ -68,6 +69,7 @@ ElegantOTA works on the following microcontrollers/boards:
 ## Looking for more? Upgrade to Pro.
 
 ElegantOTA Pro comes with the following extended functionality:
+
 - Exclusive Drag & Drop Zone
 - Toggle OTA modes
 - Hardware ID & Firmware Version on UI

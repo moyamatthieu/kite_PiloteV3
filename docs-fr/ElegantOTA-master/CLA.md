@@ -10,7 +10,7 @@ The purpose of this contributor agreement ("Agreement") is to clarify and docume
 
 If You are an employee and have created the Contribution as part of your employment, You need to have Your employer approve this Agreement or sign the Entity version of this document. If You do not own the Copyright in the entire work of authorship, any other author of the Contribution should also sign this – in any event, please contact Us at <hello@softt.io>
 
-### 1\. Definitions
+### 1. Definitions
 
 **"You"** means the individual Copyright owner who Submits a Contribution to Us.
 
@@ -28,7 +28,7 @@ If You are an employee and have created the Contribution as part of your employm
 
 **"Documentation"** means any non-software portion of a Contribution.
 
-### 2\. License grant
+### 2. License grant
 
 #### 2.1 Copyright license to Us
 
@@ -44,7 +44,7 @@ Subject to the terms and conditions of this Agreement, You hereby grant to Us a 
 
 Moral Rights remain unaffected to the extent they are recognized and not waivable by applicable law. Notwithstanding, You may add your name to the attribution mechanism customary used in the Materials you Contribute to, such as the header of the source code files of Your Contribution, and We will respect this attribution when using Your Contribution.
 
-### 3\. Patents
+### 3. Patents
 
 #### 3.1 Patent license
 
@@ -72,7 +72,7 @@ IF THE DISCLAIMER AND DAMAGE WAIVER MENTIONED IN SECTION 4. AND SECTION 5. CANNO
 
 7.3 In the event of a termination of this Agreement Sections 4, 5, 6, 7 and 8 shall survive such termination and shall remain in full force thereafter. For the avoidance of doubt, Free and Open Source Software (sub)licenses that have already been granted for Contributions at the date of the termination shall remain in full force after the termination of this Agreement.
 
-### 8 Miscellaneous
+### 8. Miscellaneous
 
 8.1 This Agreement and all disputes, claims, actions, suits or other proceedings arising out of this agreement or relating in any way to it shall be governed by the laws of India excluding its private international law provisions.
 

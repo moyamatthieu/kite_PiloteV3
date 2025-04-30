@@ -1,10 +1,10 @@
+# Règles de Codage
+
 - Toujours ajouter un commentaire décrivant la fonction de chaque élément clé du code.
-- ne modifie jamais le code des librairies !!!!!
+- ne modifie jamais le code des librairies !!!!
+- crer des fichiers sans erreurs !!
 
-
-
-
-# Guide de Développement - Projet Kite PiloteV3
+## Guide de Développement - Projet Kite PiloteV3
 
 ## Introduction
 
@@ -12,7 +12,7 @@ Bienvenue dans le projet Kite PiloteV3 ! Ce document présente les instructions 
 
 ## Structure du Projet
 
-```
+```plaintext
 kite_PiloteV3/
 ├── src/                    # Code source principal
 │   └── main.cpp            # Point d'entrée du programme
@@ -22,6 +22,7 @@ kite_PiloteV3/
 ├── platformio.ini          # Configuration PlatformIO
 ├── wokwi.toml              # Configuration pour simulation Wokwi
 └── diagram.json            # Définition du circuit pour Wokwi
+```plaintext
 ```
 
 ## Fonctionnalités Principales
