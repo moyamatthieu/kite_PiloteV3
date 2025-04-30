@@ -1,0 +1,104 @@
+#if defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <WiFiClient.h>
+  #include <ESP8266WebServer.h>
+#elif defined(ESP32)
+  #include <WiFi.h>
+  #include <WiFiClient.h>
+  #include <WebServer.h>
+#endif
+
+#include <ElegantOTA.h>
+
+// Informations de connexion WiFi
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+
+// Création d'un serveur web sur le port 80
+#if defined(ESP8266)
+  ESP8266WebServer server(80);
+#elif defined(ESP32)
+  WebServer server(80);
+#endif
+
+/**
+ * Gestionnaire de requêtes pour la page racine
+ */
+void handleRoot() {
+  // Envoi d'une réponse HTTP 200 avec un message simple
+  server.send(200, "text/plain", "Kite PiloteV3 - ESP32");
+}
+
+unsigned long ota_progress_millis = 0;
+
+void onOTAStart() {
+  // Log when OTA has started
+  Serial.println("OTA update started!");
+  // <Add your own code here>
+}
+
+void onOTAProgress(size_t current, size_t final) {
+  // Log every 1 second
+  if (millis() - ota_progress_millis > 1000) {
+    ota_progress_millis = millis();
+    Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
+  }
+}
+
+void onOTAEnd(bool success) {
+  // Log when OTA has finished
+  if (success) {
+    Serial.println("OTA update finished successfully!");
+  } else {
+    Serial.println("There was an error during OTA update!");
+  }
+  // <Add your own code here>
+}
+
+/**
+ * Initialisation du système
+ */
+void setup() {
+  // Initialisation de la communication série à 115200 bauds
+  Serial.begin(115200);
+  
+  // Configuration du mode WiFi en mode station
+  WiFi.mode(WIFI_STA);
+  // Tentative de connexion au réseau WiFi
+  WiFi.begin(ssid, password);
+
+  // Attente de la connexion WiFi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  // Affichage des informations de connexion une fois connecté
+  Serial.println("");
+  Serial.print("Connecté à ");
+  Serial.println(ssid);
+  Serial.print("Adresse IP : ");
+  Serial.println(WiFi.localIP());
+
+  // Configuration du serveur web
+  server.on("/", handleRoot);
+  ElegantOTA.begin(&server);    // Start ElegantOTA
+  
+  // Configurer les callbacks ElegantOTA
+  ElegantOTA.onStart(onOTAStart);
+  ElegantOTA.onProgress(onOTAProgress);
+  ElegantOTA.onEnd(onOTAEnd);
+  
+  server.begin();
+  Serial.println("Serveur HTTP démarré");
+}
+
+/**
+ * Boucle principale d'exécution
+ */
+void loop() {
+  // Gestion des requêtes clients du serveur web
+  server.handleClient();
+  // Mise à jour d'ElegantOTA
+  ElegantOTA.loop();
+}
