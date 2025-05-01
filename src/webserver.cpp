@@ -3,6 +3,7 @@
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
+#include "fallback_html.h"
 
 // Variable globale pour déterminer le mode de fonctionnement
 bool useSpiffsFiles = false;
@@ -14,11 +15,15 @@ uint16_t getServerPort(AsyncWebServer* server) {
 
 // Fonction pour initialiser SPIFFS
 bool initSPIFFS() {
+    Serial.println("Tentative d'initialisation de SPIFFS...");
     if (!SPIFFS.begin(true)) {
         Serial.println("Erreur lors de l'initialisation de SPIFFS");
+        Serial.printf("État SPIFFS: %d\n", SPIFFS.totalBytes());
         return false;
     }
     Serial.println("SPIFFS initialisé avec succès");
+    Serial.printf("Taille totale SPIFFS: %u bytes\n", SPIFFS.totalBytes());
+    Serial.printf("Espace utilisé SPIFFS: %u bytes\n", SPIFFS.usedBytes());
     return true;
 }
 
@@ -43,13 +48,16 @@ void setupServerRoutes(AsyncWebServer* server) {
         if (useSpiffsFiles && SPIFFS.exists("/index.html")) {
             request->send(SPIFFS, "/index.html", "text/html");
         } else {
-            request->send(200, "text/html", "Kite PiloteV3 - Serveur Web");
+            String htmlContent = String(fallbackHtml);
+            htmlContent.replace("%s", getSystemStatusString());
+            htmlContent.replace("%s", WiFi.localIP().toString());
+            request->send(200, "text/html", htmlContent);
         }
     });
     
     // API pour obtenir les informations du système
     server->on("/api/info", [](AsyncWebServerRequest *request){
-        String json = "{\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+        String json = "{\"ip\":\"" + WiFi.localIP().toString() + "\", \"status\":\"" + getSystemStatusString() + "\"}";
         request->send(200, "application/json", json);
     });
 

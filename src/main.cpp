@@ -286,6 +286,12 @@ void setup() {
   
   setupGPIO();
   setupWiFi();
+  
+  // Initialiser SPIFFS avant de configurer le serveur
+  if (!SPIFFS.begin(true)) {
+    Serial.println("Erreur lors de l'initialisation de SPIFFS");
+  }
+  
   setupServer();
 }
 

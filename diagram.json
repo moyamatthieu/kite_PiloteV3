@@ -11,11 +11,11 @@
       "attrs": { "env": "arduino-esp32" }
     },
     {
-      "type": "wokwi-ssd1306",
-      "id": "oled",
-      "top": -175.7,
-      "left": -36.5,
-      "attrs": { "i2c-address": "0x3C" }
+      "type": "wokwi-ili9341",
+      "id": "ili9341",
+      "top": -373.6,
+      "left": -9.9,
+      "attrs": { "rotation": "270" }
     },
     { "type": "wokwi-led", "id": "led1", "top": 140.4, "left": 215, "attrs": { "color": "red" } },
     {
@@ -46,7 +46,18 @@
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "esp:3V3", "oled:VCC", "red", [ "v-211.2", "h-57.6" ] ],
+    [ "esp:3V3", "ili9341:VCC", "red", [ "v-62.3", "h29.19" ] ],
+    [ "esp:GND.1", "ili9341:GND", "black", [ "v67.2", "h-153.6", "v28.8" ] ],
+    [ "esp:18", "ili9341:SCK", "yellow", [ "v-38.4", "h125.4", "v240" ] ],
+    [ "esp:23", "ili9341:MOSI", "green", [ "v-19.2", "h124.8", "v259.2" ] ],
+    [ "esp:2", "ili9341:CS", "blue", [ "h-48", "v81.7" ] ],
+    [ "esp:32", "ili9341:DC", "green", [ "h-48", "v100" ] ],
+    [ "esp:33", "ili9341:RST", "blue", [ "h-38.4", "v33.6" ] ],
+    [ "esp:25", "ili9341:MISO", "yellow", [ "h-38.4", "v50" ] ],
+    [ "esp:21", "ili9341:T_DIN", "green", [ "v-19.2", "h124.8", "v259.2" ] ],
+    [ "esp:22", "ili9341:T_CS", "blue", [ "h-48", "v120" ] ],
+    [ "esp:4", "ili9341:T_CLK", "yellow", [ "v-38.4", "h125.4", "v240" ] ],
+    [ "esp:5", "ili9341:T_DOUT", "green", [ "h-48", "v140" ] ],
     [ "esp:D2", "led1:A", "blue", [ "h-47.61", "v90.4", "h278.4" ] ],
     [ "led1:C", "r1:1", "black", [ "v0" ] ],
     [ "btn1:1.l", "esp:D4", "blue", [ "h-38.4", "v33.6" ] ],
@@ -54,13 +65,7 @@
     [ "gnd1:GND", "r1:2", "black", [ "v-28.8", "h57.6" ] ],
     [ "gnd1:GND", "btn1:2.l", "black", [ "v-86.4", "h28.8", "v-134.4", "h28.8" ] ],
     [ "gnd1:GND", "btn2:2.l", "black", [ "v-86.4", "h28.8", "v-268.8" ] ],
-    [ "vcc1:VCC", "oled:VIN", "red", [ "v9.6", "h-115.2" ] ],
-    [ "oled:GND", "gnd1:GND", "black", [ "v-28.3", "h77", "v508.8" ] ],
-    [ "gnd1:GND", "esp:GND.1", "black", [ "v-67.2", "h-153.6", "v-28.8" ] ],
-    [ "oled:DATA", "esp:21", "green", [ "v-19.2", "h124.8", "v259.2" ] ],
-    [ "oled:CLK", "esp:22", "yellow", [ "v-38.4", "h125.4", "v240" ] ],
-    [ "esp:5", "btn2:1.l", "green", [ "h48.24", "v-100.7" ] ],
-    [ "esp:4", "btn1:1.l", "green", [ "h29.04", "v-62.3" ] ]
+    [ "gnd1:GND", "esp:GND.1", "black", [ "v-67.2", "h-153.6", "v-28.8" ] ]
   ],
   "dependencies": {}
 }

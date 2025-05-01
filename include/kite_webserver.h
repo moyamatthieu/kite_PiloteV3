@@ -1,5 +1,5 @@
 /*
------------------------
+  -----------------------
   Kite PiloteV3 - Module serveur web
   -----------------------
 
@@ -28,5 +28,8 @@ void setWebServerMode(bool useFiles);
 
 // Configuration des routes du serveur web
 void setupServerRoutes(AsyncWebServer* server);
+
+// Fonction pour obtenir l'état du système sous forme de chaîne
+String getSystemStatusString();
 
 #endif // KITE_WEBSERVER_H

@@ -115,27 +115,65 @@ void DisplayManager::displayMessage(const String& title, const String& message, 
     return;
   }
   
-  if(clear) {
+  if (clear) {
     display.clearDisplay();
   }
   
-  // Paramètres d'affichage optimisés
-  display.setTextSize(TEXT_SIZE_TITLE);
   display.setTextColor(SSD1306_WHITE);
   
-  // Titre en haut
+  // Afficher le titre
+  display.setTextSize(TEXT_SIZE_TITLE);
   display.setCursor(0, 0);
   display.println(title);
   
-  // Message principal
-  display.setCursor(0, 16);
-  display.println(message);
+  // Afficher le message avec gestion multiligne
+  display.setTextSize(TEXT_SIZE_NORMAL);
+  int y = 16; // Position Y pour le message
+  int lineHeight = 12; // Hauteur d'une ligne
   
-  // Forcer l'affichage et s'assurer que tout est dessiné
+  // Diviser le message en lignes si nécessaire
+  int lastSpaceIndex = -1;
+  String remainingMessage = message;
+  
+  while (remainingMessage.length() > 0) {
+    String line = "";
+    int maxLineLength = (SCREEN_WIDTH - display.getCursorX()) / 6; // Calculer la longueur max de la ligne
+    
+    for (int i = 0; i < remainingMessage.length() && i < maxLineLength; i++) {
+      if (remainingMessage[i] == ' ') {
+        lastSpaceIndex = i;
+      }
+      line += remainingMessage[i];
+      
+      if (i == maxLineLength - 1 && lastSpaceIndex != -1) {
+        line = remainingMessage.substring(0, lastSpaceIndex);
+        remainingMessage = remainingMessage.substring(lastSpaceIndex + 1);
+        break;
+      }
+    }
+    
+    if (line.length() == remainingMessage.length()) {
+      remainingMessage = "";
+    } else {
+      if (lastSpaceIndex == -1) {
+        remainingMessage = remainingMessage.substring(line.length());
+      }
+    }
+    
+    display.setCursor(0, y);
+    display.println(line);
+    y += lineHeight;
+    lastSpaceIndex = -1;
+    
+    // Vérifier si on dépasse la hauteur de l'écran
+    if (y > SCREEN_HEIGHT - lineHeight) {
+      break;
+    }
+  }
+  
   display.display();
-  delay(10);  // Court délai pour stabiliser l'affichage
+  delay(10); // Court délai pour stabiliser l'affichage
   
-  // Afficher également sur le port série
   Serial.println(title + ": " + message);
 }
 

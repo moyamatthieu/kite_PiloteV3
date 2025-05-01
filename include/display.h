@@ -28,8 +28,8 @@
 #define I2C_CLOCK_SPEED   100000   // Fréquence de l'horloge I2C (100kHz pour stabilité)
 
 // Paramètres d'affichage
-const uint8_t TEXT_SIZE_TITLE = 1;          // Taille du texte pour les titres
-const uint8_t TEXT_SIZE_CONTENT = 1;        // Taille du texte pour le contenu
+const uint8_t TEXT_SIZE_TITLE = 2;          // Taille du texte pour les titres
+const uint8_t TEXT_SIZE_NORMAL = 1;         // Taille du texte normal
 const uint16_t DISPLAY_ROTATION_INTERVAL = 5000;  // Intervalle de rotation des écrans (ms)
 const uint16_t DISPLAY_CHECK_INTERVAL = 30000;    // Intervalle de vérification de l'écran (ms)
 
