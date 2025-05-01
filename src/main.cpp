@@ -1,13 +1,13 @@
 /*
   -----------------------
-  Kite PiloteV3 - ESP32 avec ElegantOTA
+  Kite PiloteV3 - ESP32 avec ElegantOTA et écran tactile
   -----------------------
   
-  Système de contrôle ESP32 avec mise à jour OTA et interface utilisateur OLED.
+  Système de contrôle ESP32 avec mise à jour OTA et interface utilisateur tactile TFT.
   Ce programme permet le contrôle et la surveillance d'équipements via une interface
-  web accessible à distance et un écran OLED pour visualisation locale.
+  web accessible à distance et un écran TFT avec tactile pour visualisation et contrôle local.
   
-  Version: 1.0.3
+  Version: 2.0.0
   Date: 30 avril 2025
   Auteurs: Équipe Kite PiloteV3
 */
@@ -18,39 +18,25 @@
 #include <ESPAsyncWebServer.h>   // Serveur web asynchrone
 #include <ElegantOTA.h>          // Mise à jour OTA (Over The Air)
 #include <SPIFFS.h>              // Système de fichiers SPIFFS
+#include <Wire.h>                // Communication I2C pour l'écran tactile
+#include "../include/config.h"   // Fichier de configuration centralisé
 #include "../include/display.h"  // Module de gestion de l'affichage
 #include "../include/kite_webserver.h" // Module de gestion du serveur web
-
-// === DÉFINITION DES CONSTANTES ===
-
-// Configuration WiFi
-const char* WIFI_SSID = "Wokwi-GUEST";      // SSID du réseau WiFi
-const char* WIFI_PASSWORD = "";             // Mot de passe WiFi (vide pour réseau ouvert)
-const uint16_t SERVER_PORT = 80;            // Port du serveur web
-
-// Mode de fonctionnement du serveur web
-const bool USE_SPIFFS_FILES = true;         // true: utilise les fichiers SPIFFS, false: génère le HTML en code
-
-// Pins
-const uint8_t LED_PIN = 2;                  // Pin pour la LED indicatrice
-const uint8_t BUTTON_BLUE_PIN = 4;          // Pin pour le bouton bleu
-const uint8_t BUTTON_GREEN_PIN = 5;         // Pin pour le bouton vert
-
-// Timeouts et délais
-const uint16_t WIFI_TIMEOUT_MS = 20000;     // Timeout pour la connexion WiFi (ms)
+#include "../include/touch_ui.h" // Module de gestion de l'interface tactile
+#include "../include/task_manager.h" // Module de gestion des tâches multiples
 
 // === DÉFINITION DES VARIABLES GLOBALES ===
 
 // Objets principaux
-DisplayManager display;                       // Gestionnaire d'affichage OLED
+DisplayManager display;                       // Gestionnaire d'affichage TFT
+TouchUIManager touchUI(&display);             // Gestionnaire d'interface tactile
 AsyncWebServer server(SERVER_PORT);           // Serveur web asynchrone
+TaskManager taskManager;                      // Gestionnaire de tâches multiples
 
 // Variables d'état système
 bool wifiConnected = false;                  // État de la connexion WiFi
 uint8_t systemState = 0;                     // État général du système
 unsigned long ota_progress_millis = 0;       // Timestamp pour la progression OTA
-
-// Variables pour la gestion du temps (non-bloquante)
 unsigned long lastSystemCheck = 0;           // Dernière vérification système
 
 // === DÉCLARATION DES FONCTIONS ===
@@ -72,20 +58,29 @@ String getSystemStatusString();
 
 // === IMPLÉMENTATION DES FONCTIONS ===
 
+#include "../include/logging.h"  // Système de journalisation avancé
+
+// Variables pour contrôler le système
+bool systemInitialized = false;
+unsigned long lastMemoryReport = 0;
+
 /**
- * Initialise la communication série avec un débit de 115200 bauds
- * Effectue plusieurs tests pour vérifier que la communication fonctionne
+ * Initialise la communication série avec le système de journalisation avancé
  */
 void setupSerial() {
-  Serial.begin(115200);
-  delay(100);  // Court délai pour stabiliser la connexion
+  // Initialiser avec niveau LOG_INFO (défini dans platformio.ini via LOG_LEVEL)
+  #if defined(LOG_LEVEL)
+    logInit((LogLevel)LOG_LEVEL);
+  #else
+    logInit(LOG_INFO);  // Par défaut si non défini
+  #endif
   
-  // Tests de communication série
-  Serial.println("\n\n=============================================");
-  Serial.println("Démarrage du système Kite PiloteV3");
-  Serial.println("Version: 1.0.3");
-  Serial.println("=============================================");
-  Serial.flush();
+  // Message de démarrage
+  LOG_INFO("SYSTEM", "=============================================");
+  LOG_INFO("SYSTEM", "Démarrage du système Kite PiloteV3");
+  LOG_INFO("SYSTEM", "Version: %s", SYSTEM_VERSION);
+  LOG_INFO("SYSTEM", "Build: %s %s", SYSTEM_BUILD_DATE, SYSTEM_BUILD_TIME);
+  LOG_INFO("SYSTEM", "=============================================");
 }
 
 /**
@@ -120,7 +115,7 @@ void setupWiFi() {
     Serial.print("Adresse IP : ");
     Serial.println(WiFi.localIP());
     
-    // Afficher les informations de connexion sur l'écran OLED
+    // Afficher les informations de connexion sur l'écran TFT
     display.displayMessage("WiFi", "Connecté à " + String(WIFI_SSID), true);
     display.displayMessage("IP", WiFi.localIP().toString(), false);
     delay(2000);
@@ -202,7 +197,7 @@ void onOTAProgress(size_t current, size_t final) {
     ota_progress_millis = millis();
     Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
     
-    // Afficher la progression sur l'écran OLED
+    // Afficher la progression sur l'écran TFT
     display.displayOTAProgress(current, final);
     
     // Faire clignoter la LED pour indiquer l'activité
@@ -268,7 +263,108 @@ String getSystemStatusString() {
   String status = "OK";
   if (!wifiConnected) status = "WiFi déconnecté";
   if (!display.isInitialized()) status += ", Écran inactif";
+  if (!display.isTouchInitialized()) status += ", Tactile inactif";
   return status;
+}
+
+// Callbacks pour les interactions tactiles
+// Fonction sécurisée pour afficher un message et revenir à l'écran précédent
+void showMessageAndReturnSafely(DisplayManager& display, TouchUIManager& touchUI, const char* title, const char* message, uint8_t returnScreen) {
+  static bool messagePending = false;
+  
+  // Protection contre les appels multiples ou récursifs
+  if (messagePending || !display.isInitialized()) {
+    return;
+  }
+  
+  messagePending = true;
+  
+  // Utiliser le gestionnaire de tâches pour envoyer un message d'affichage (évite les allocations)
+  TaskManager::sendMessage(MSG_DISPLAY_UPDATE, 0, message);
+  
+  // Afficher le message sur l'écran
+  display.displayMessage(title, message);
+  
+  // Programmez un changement d'écran sans utiliser delay()
+  // Nous le ferons à la prochaine invocation
+  static uint8_t targetScreen = 0;
+  static unsigned long messageTimeout = 0;
+  targetScreen = returnScreen;
+  messageTimeout = millis() + 1500; // 1.5 secondes au lieu de 2 pour l'affichage
+  
+  // Vérifier dans la boucle principale si le délai est écoulé
+  if (millis() > messageTimeout) {
+    touchUI.showScreen(targetScreen);
+    messagePending = false;
+  }
+}
+
+void onMainScreenButton(uint8_t buttonId) {
+  Serial.printf("Bouton principal pressé: %d\n", buttonId);
+  
+  // Protection contre les valeurs hors limites
+  if (buttonId > 2) {
+    return;
+  }
+  
+  switch (buttonId) {
+    case 0: // Tableau de bord
+      touchUI.showScreen(2); // Pas de délai, changement direct
+      break;
+    case 1: // Paramètres
+      touchUI.showScreen(1); // Pas de délai, changement direct
+      break;
+    case 2: // Informations
+      // Afficher des informations système avec un message simple sans string
+      if (display.isInitialized()) {
+        static const char* infoMessage = "Système actif\nVersion: 2.0.0";
+        display.displayMessage("Informations", infoMessage);
+        // On pourrait utiliser showMessageAndReturnSafely ici si on veut revenir à l'écran principal
+      }
+      break;
+  }
+}
+
+void onSettingsScreenButton(uint8_t buttonId) {
+  Serial.printf("Bouton paramètres pressé: %d\n", buttonId);
+  
+  // Protection contre les valeurs hors limites
+  if (buttonId > 4) {
+    return;
+  }
+  
+  switch (buttonId) {
+    case 0: // WiFi
+      // Afficher des informations WiFi de façon sécurisée (sans concaténation)
+      if (display.isInitialized()) {
+        static char wifiMessage[50]; // Buffer statique
+        snprintf(wifiMessage, sizeof(wifiMessage), "SSID: %s", WIFI_SSID);
+        display.displayMessage("WiFi", wifiMessage);
+      }
+      break;
+    case 4: // Retour
+      touchUI.showScreen(0); // Retour immédiat sans délai
+      break;
+  }
+}
+
+void onDashboardScreenButton(uint8_t buttonId) {
+  Serial.printf("Bouton tableau de bord pressé: %d\n", buttonId);
+  
+  // Protection contre les valeurs hors limites
+  if (buttonId > 4) {
+    return;
+  }
+  
+  switch (buttonId) {
+    case 0: // Graphiques
+      // Afficher un message simple
+      display.displayMessage("Graphiques", "Fonctionnalité à venir");
+      break;
+    case 4: // Retour
+      touchUI.showScreen(0); // Retour immédiat sans délai
+      break;
+  }
 }
 
 /**
@@ -278,42 +374,84 @@ String getSystemStatusString() {
 void setup() {
   setupSerial();
   
-  // Initialiser le module d'affichage
-  display.setupI2C();
-  if (display.initOLED()) {
+  // Initialiser le module d'affichage - écran TFT
+  display.setupSPI();
+  if (display.initTFT()) {
     display.displayWelcomeScreen();
+  }
+  
+  // Initialiser l'écran tactile capacitif via I2C
+  display.setupI2C();
+  if (display.initTouch()) {
+    Serial.println("Écran tactile capacitif FT6206 initialisé avec succès!");
+  } else {
+    Serial.println("Échec d'initialisation de l'écran tactile capacitif FT6206");
   }
   
   setupGPIO();
   setupWiFi();
   
-  // Initialiser SPIFFS avant de configurer le serveur
-  if (!SPIFFS.begin(true)) {
-    Serial.println("Erreur lors de l'initialisation de SPIFFS");
-  }
+  // Comme nous utilisons le mode de génération HTML par défaut,
+  // nous n'initialisons pas SPIFFS pour éviter des erreurs inutiles
+  Serial.println("Mode génération HTML activé, SPIFFS non utilisé");
   
   setupServer();
+  
+  // Initialiser l'interface tactile
+  touchUI.begin();
+  touchUI.calibrateTouch(); // Pour l'écran FT6206, cette fonction ne fait rien mais affiche un message
+  
+  // Configurer les callbacks pour l'interface tactile
+  // Les dimensions de l'écran sont SCREEN_WIDTH=240, SCREEN_HEIGHT=320
+  // Layout optimisé pour utiliser l'espace disponible
+  
+  // Écran principal - boutons centrés avec espacement uniforme
+  uint8_t mainScreenId = touchUI.createScreen("Menu Principal", onMainScreenButton);
+  touchUI.addButton(mainScreenId, 20, 60, 200, 50, "Tableau de bord", COLOR_BLUE);
+  touchUI.addButton(mainScreenId, 20, 130, 200, 50, "Paramètres", COLOR_GREEN);
+  touchUI.addButton(mainScreenId, 20, 200, 200, 50, "Informations", COLOR_MAGENTA);
+  
+  // Écran paramètres - grille 2x2 de boutons avec bouton retour en bas
+  uint8_t settingsScreenId = touchUI.createScreen("Paramètres", onSettingsScreenButton);
+  touchUI.addButton(settingsScreenId, 15, 60, 100, 50, "WiFi", COLOR_BLUE);
+  touchUI.addButton(settingsScreenId, 125, 60, 100, 50, "Affichage", COLOR_GREEN);
+  touchUI.addButton(settingsScreenId, 15, 130, 100, 50, "Système", COLOR_RED);
+  touchUI.addButton(settingsScreenId, 125, 130, 100, 50, "OTA", COLOR_MAGENTA);
+  touchUI.addButton(settingsScreenId, 70, 210, 100, 50, "Retour", COLOR_ORANGE);
+  
+  // Écran tableau de bord - grille 2x2 de boutons avec bouton retour en bas
+  uint8_t dashboardScreenId = touchUI.createScreen("Tableau de bord", onDashboardScreenButton);
+  touchUI.addButton(dashboardScreenId, 15, 60, 100, 50, "Graphiques", COLOR_BLUE);
+  touchUI.addButton(dashboardScreenId, 125, 60, 100, 50, "Données", COLOR_GREEN);
+  touchUI.addButton(dashboardScreenId, 15, 130, 100, 50, "Alarmes", COLOR_RED);
+  touchUI.addButton(dashboardScreenId, 125, 130, 100, 50, "Log", COLOR_MAGENTA);
+  touchUI.addButton(dashboardScreenId, 70, 210, 100, 50, "Retour", COLOR_ORANGE);
+  
+  // Afficher l'écran principal
+  touchUI.showScreen(mainScreenId);
+  
+  // Initialiser et démarrer le gestionnaire de tâches multiples
+  taskManager.begin(&display, &touchUI, &server);
+  taskManager.startTasks();
+  
+  Serial.println("Système initialisé et prêt!");
 }
 
 /**
  * Boucle principale exécutée en continu
- * Utilise des approches non-bloquantes pour gérer les différentes tâches
+ * Dans cette nouvelle version, la boucle principale fait très peu de choses 
+ * car les tâches sont gérées par FreeRTOS dans des threads séparés
  */
 void loop() {
-  // Gestion des mises à jour OTA
+  // La majorité des tâches est maintenant gérée par le TaskManager
+  // Cette boucle reste légère pour assurer une meilleure réactivité
+  
+  // Gestion des mises à jour OTA (toujours dans la boucle principale)
   ElegantOTA.loop();
   
-  // Vérification de l'état du système (toutes les 10s)
-  checkSystemStatus();
+  // On peut ajouter ici des tâches qui doivent absolument rester dans la boucle principale
+  // Mais l'essentiel est géré dans des tâches séparées via FreeRTOS
   
-  // Vérification de l'état de l'écran (toutes les 30s)
-  display.checkDisplayStatus();
-  
-  // Mise à jour de l'affichage (toutes les 5s)
-  if (wifiConnected) {
-    display.updateDisplayRotation(WIFI_SSID, WiFi.localIP());
-  }
-  
-  // Autres tâches non-bloquantes peuvent être ajoutées ici
-  // ...
+  // Court délai pour éviter de saturer le CPU
+  delay(10);
 }

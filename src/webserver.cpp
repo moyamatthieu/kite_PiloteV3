@@ -2,91 +2,51 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <WiFi.h>
-#include <SPIFFS.h>
 #include "fallback_html.h"
-
-// Variable globale pour déterminer le mode de fonctionnement
-bool useSpiffsFiles = false;
 
 // Fonction pour obtenir le port du serveur
 uint16_t getServerPort(AsyncWebServer* server) {
     return 80; // Port par défaut, à adapter selon votre configuration
 }
 
-// Fonction pour initialiser SPIFFS
-bool initSPIFFS() {
-    Serial.println("Tentative d'initialisation de SPIFFS...");
-    if (!SPIFFS.begin(true)) {
-        Serial.println("Erreur lors de l'initialisation de SPIFFS");
-        Serial.printf("État SPIFFS: %d\n", SPIFFS.totalBytes());
-        return false;
-    }
-    Serial.println("SPIFFS initialisé avec succès");
-    Serial.printf("Taille totale SPIFFS: %u bytes\n", SPIFFS.totalBytes());
-    Serial.printf("Espace utilisé SPIFFS: %u bytes\n", SPIFFS.usedBytes());
-    return true;
-}
-
 // Fonction pour définir le mode de fonctionnement
+// Cette fonction est simplifiée car on n'utilise plus le mode SPIFFS
 void setWebServerMode(bool useFiles) {
-    useSpiffsFiles = useFiles;
-    Serial.println(useSpiffsFiles ? "Mode fichiers SPIFFS activé" : "Mode génération de code HTML activé");
+    // Toujours mode HTML généré
+    Serial.println("Mode génération de code HTML activé");
 }
 
-// Gestion des routes - avec support pour les deux modes
+// Gestion des routes - simplifié sans SPIFFS
 void setupServerRoutes(AsyncWebServer* server) {
-    // Initialiser SPIFFS si nécessaire
-    if (useSpiffsFiles) {
-        if (!initSPIFFS()) {
-            Serial.println("Passage au mode génération de code HTML par défaut");
-            useSpiffsFiles = false;
-        }
-    }
-
-    // Route principale - utiliser WebRequestMethod sans les constantes
+    // Route principale
     server->on("/", [](AsyncWebServerRequest *request){
-        if (useSpiffsFiles && SPIFFS.exists("/index.html")) {
-            request->send(SPIFFS, "/index.html", "text/html");
-        } else {
-            String htmlContent = String(fallbackHtml);
-            htmlContent.replace("%s", getSystemStatusString());
-            htmlContent.replace("%s", WiFi.localIP().toString());
-            request->send(200, "text/html", htmlContent);
-        }
+        // Utilisation du HTML généré directement avec gestion dynamique
+        String htmlContent = String(fallbackHtml);
+        htmlContent.replace("{status}", getSystemStatusString());
+        htmlContent.replace("{ip}", WiFi.localIP().toString());
+        request->send(200, "text/html", htmlContent);
     });
     
     // API pour obtenir les informations du système
     server->on("/api/info", [](AsyncWebServerRequest *request){
-        String json = "{\"ip\":\"" + WiFi.localIP().toString() + "\", \"status\":\"" + getSystemStatusString() + "\"}";
-        request->send(200, "application/json", json);
+        // Créer dynamiquement la chaîne JSON pour éviter des problèmes d'allocation de mémoire
+        char jsonBuffer[256]; // Buffer statique assez grand pour le JSON
+        snprintf(jsonBuffer, sizeof(jsonBuffer), "{\"ip\":\"%s\", \"status\":\"%s\"}", 
+                 WiFi.localIP().toString().c_str(), 
+                 getSystemStatusString().c_str());
+        request->send(200, "application/json", jsonBuffer);
     });
 
-    // API pour redémarrer le système avec vérification manuelle de la méthode
-    server->on("/api/restart", [](AsyncWebServerRequest *request){
-        // Vérifier manuellement si la méthode est POST
-        if (request->methodToString() == "POST") {
-            request->send(200, "text/plain", "Redémarrage en cours...");
-            delay(500);
-            ESP.restart();
-        } else {
-            request->send(405, "text/plain", "Méthode non autorisée");
-        }
+    // API pour redémarrer le système avec gestion des erreurs
+    server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "Redémarrage en cours...");
+        ESP.restart();
     });
 
     // Accès à la dashboard HTML
     server->on("/dashboard", [](AsyncWebServerRequest *request){
-        if (useSpiffsFiles && SPIFFS.exists("/dashboard.html")) {
-            request->send(SPIFFS, "/dashboard.html", "text/html");
-        } else {
-            request->send(200, "text/html", "Page de tableau de bord non disponible en mode génération de code.");
-        }
+        request->send(200, "text/html", "Page de tableau de bord disponible en mode simple.");
     });
     
-    // Si mode fichiers SPIFFS, servir les fichiers statiques
-    if (useSpiffsFiles) {
-        // Gestionnaire pour servir les fichiers statiques du dossier data
-        server->serveStatic("/", SPIFFS, "/");
-        
-        Serial.println("Routes pour fichiers statiques configurées");
-    }
+    Serial.println("Routes HTTP configurées en mode génération de code HTML");
 }

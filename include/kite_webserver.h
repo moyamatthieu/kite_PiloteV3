@@ -18,12 +18,8 @@
 // Fonction pour obtenir le port du serveur
 uint16_t getServerPort(AsyncWebServer* server);
 
-// Fonction pour initialiser SPIFFS (système de fichiers)
-bool initSPIFFS();
-
 // Fonction pour définir le mode de fonctionnement du serveur web
-// - true: utilise les fichiers du dossier data (SPIFFS)
-// - false: génère le contenu HTML directement depuis le code
+// Cette fonction est maintenant simplifiée car le mode est toujours HTML généré
 void setWebServerMode(bool useFiles);
 
 // Configuration des routes du serveur web
