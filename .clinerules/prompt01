@@ -1,6 +1,22 @@
 # Règles de Codage
 
-- Toujours ajouter un commentaire décrivant la fonction de chaque élément clé du code.
-- Ne jamais modifier le code des librairies !!!!
-- Créer des fichiers sans erreurs !!
-- utilise les serveur mcp !!!
+## Bonnes pratiques générales
+- Toujours ajouter un commentaire descriptif pour chaque élément clé du code
+- Ne jamais modifier le code des bibliothèques externes
+- S'assurer que le code compile sans erreurs avant de le soumettre
+- Optimiser le code pour les performances (ESP32 a une puissance de calcul limitée)
+- Respecter l'architecture existante du projet et placer les fonctions au bon endroit
+- Réfléchir en termes de développement futur pour éviter des modifications structurelles plus tard
+
+## Architecture du projet
+- Utiliser l'architecture MCP (Model-Controller-Presenter) pour structurer le code
+- Suivre les objectifs définis dans le fichier projet_kite_complet.md
+- Ne pas utiliser la mémoire SPIFFS
+- Respecter la hiérarchie des dossiers et l'organisation logique du code
+- Veiller à ce que chaque module reste dans son domaine de responsabilité
+
+## Méthodologie de travail
+- Adopter une réflexion organisée et structurée
+- Corriger ses propres idées en suivant les instructions générales
+- Prendre des initiatives pertinentes pour améliorer le projet
+- Anticiper les besoins futurs lors de l'implémentation de nouvelles fonctionnalités

@@ -1,52 +1,76 @@
-# Kite PiloteV3
+# Kite PiloteV3 - Autopilote pour Kite Générateur d'Électricité
 
 ## Description
 
-Kite PiloteV3 est un système de contrôle basé sur ESP32 offrant une interface web avec capacité de mise à jour OTA (Over The Air) et une interface utilisateur tactile via écran TFT ILI9341. Ce système est conçu pour surveiller et contrôler des équipements à distance, avec une interface visuelle interactive directe et une possibilité de mise à jour sans connexion physique. Le système utilise une architecture multitâche robuste avec des protections contre les problèmes de mémoire et des mécanismes de journalisation avancés.
+Kite PiloteV3 est un système d'autopilote avancé pour kite générateur d'électricité basé sur ESP32. Ce projet a pour objectif de maximiser la production d'énergie renouvelable grâce à un cerf-volant de traction en contrôlant automatiquement sa trajectoire. Le système offre une interface web avec capacité de mise à jour OTA (Over The Air) et une interface utilisateur via écran LCD 2004, permettant un contrôle local ou distant. L'architecture multitâche robuste intègre des protections contre les problèmes de mémoire, des mécanismes de sécurité avancés et un système de journalisation complet.
+
+## Architecture du projet
+
+Le projet Kite PiloteV3 est construit selon l'architecture **MCP (Model-Controller-Presenter)**, une variante moderne et adaptée aux systèmes embarqués IoT:
+
+- **Model**: Gère les données et la logique métier du système
+  - Définit les structures de données du système (ex: `AutopilotParameters`, `AutopilotState`)
+  - Implémente les algorithmes de calcul et traitement des données
+  - Assure la persistance et l'intégrité des données
+
+- **Controller**: Contrôle le comportement du système et orchestre les interactions
+  - Implémente les algorithmes d'autopilotage (ex: module `autopilot.h`)
+  - Gère les réactions aux événements système (capteurs, utilisateur)
+  - Coordonne les différents composants matériels et logiciels
+
+- **Presenter**: Prépare et présente les données à l'utilisateur
+  - Gère l'interface LCD et les boutons physiques
+  - Implémente l'interface web pour l'accès à distance
+  - Transforme les données brutes en informations compréhensibles
+
+Cette architecture MCP offre plusieurs avantages pour un projet IoT complexe:
+- **Séparation claire des responsabilités**: facilite la maintenance et les tests
+- **Modularité**: permet de modifier une couche sans impacter les autres
+- **Adaptabilité**: particulièrement adaptée aux ressources limitées des systèmes embarqués
+- **Testabilité**: chaque composant peut être testé indépendamment
+
+## Objectifs du Projet
+
+- **Maximiser la production d'énergie renouvelable** en optimisant les trajectoires de vol du kite
+- **Assurer une sécurité maximale** avec des mécanismes de détection et réponse aux situations dangereuses
+- **Offrir une interface utilisateur intuitive** tant sur l'écran LCD local que via l'interface web
+- **Permettre une adaptation aux conditions changeantes** grâce aux algorithmes adaptatifs
+- **Fournir des diagnostics avancés** pour le dépannage et l'optimisation des performances
 
 ## Fonctionnalités
 
-- **Interface utilisateur tactile capacitive** : Interface tactile intuitive avec écran TFT ILI9341 et contrôleur capacitif FT6206
+- **Algorithmes d'autopilote avancés** : Calcul et optimisation des trajectoires de vol pour maximiser la génération d'énergie
+- **Modes de vol automatiques et manuels** : Différentes stratégies de vol adaptées aux conditions météorologiques
+- **Système de sécurité intégré** : Détection automatique des situations dangereuses avec procédures d'urgence
+- **Interface utilisateur avec écran LCD** : Interface intuitive avec écran LCD 2004 et boutons de navigation
 - **Architecture multitâche robuste** : Utilisation de FreeRTOS avec protections mémoire avancées
 - **Système de journalisation avancé** : Différents niveaux de log (ERROR, WARNING, INFO, DEBUG) avec formatage couleur
 - **Interface web responsive** : Interface web moderne et adaptative accessible à distance
 - **Mise à jour OTA** : Possibilité de mettre à jour le firmware sans connexion physique
 - **Serveur web asynchrone** : Réponse rapide et efficace aux requêtes web
 - **Gestion optimisée de la mémoire** : Buffers statiques et protection contre les corruptions heap
-- **Retour d'état en temps réel** : Affichage d'informations système sur l'écran tactile
+- **Retour d'état en temps réel** : Affichage d'informations système et télémétrie sur l'écran LCD
 - **Menus interactifs** : Navigation entre différents écrans pour la configuration et le monitoring
-- **Rotation automatique des informations** : Présentation séquentielle des données système
 - **Surveillance des ressources système** : Monitoring continu de l'utilisation mémoire et performances
-- **Robustesse** : Gestion avancée des erreurs et tentatives multiples d'initialisation
 - **Répartition des tâches sur deux cœurs** : Optimisation des performances avec le dual-core de l'ESP32
 - **Configuration centralisée** : Fichier config.h pour simplifier la maintenance et les modifications
 
 ## Matériel requis
 
 - **Carte principale** : ESP32 DevKit C v4 ou équivalent
-- **Écran** : TFT ILI9341 240x320 pixels (portrait) avec écran tactile capacitif FT6206
+- **Écran** : LCD 2004 (20 caractères x 4 lignes) avec module I2C
 - **Composants** :
   - 1 LED rouge (indicateur d'état)
   - 1 Résistance 220Ω (pour la LED)
-  - 2 Boutons poussoirs (bleu et vert)
+  - 4 Boutons poussoirs (bleu, vert, rouge, et jaune)
 - **Alimentation** : Via USB ou source externe 5V
 
 ## Schéma de connexion
 
-- **Écran TFT ILI9341** :
-  - MOSI → GPIO23 de l'ESP32
-  - MISO → GPIO19 de l'ESP32
-  - CLK → GPIO18 de l'ESP32
-  - CS → GPIO5 de l'ESP32
-  - DC → GPIO27 de l'ESP32
-  - RST → GPIO33 de l'ESP32
-  - VCC → 3.3V
-  - GND → GND
-- **Écran tactile capacitif FT6206** :
+- **Écran LCD 2004 avec module I2C** :
   - SDA → GPIO21 de l'ESP32
   - SCL → GPIO22 de l'ESP32
-  - IRQ → GPIO4 de l'ESP32 (optionnel)
-  - VCC → 3.3V
+  - VCC → 5V
   - GND → GND
 - **LED d'état** :
   - Anode (+) → GPIO2 via résistance 220Ω
@@ -54,6 +78,62 @@ Kite PiloteV3 est un système de contrôle basé sur ESP32 offrant une interface
 - **Boutons poussoirs** :
   - Bouton bleu → GPIO15 et GND
   - Bouton vert → GPIO16 et GND
+
+## Schéma de connexion optimisé
+
+### Composants requis
+- 1× ESP32 DevKit C v4
+- 1× Écran LCD 2004 avec module I2C
+- 1× LED rouge indicatrice
+- 1× Résistance 220Ω
+- 3× Potentiomètres à glissière:
+  - 1× horizontal (10kΩ) pour la direction
+  - 2× verticaux (10kΩ) pour le trim et la longueur des lignes
+- 2× Boutons poussoirs (bleu et vert)
+- 2× Servomoteurs
+- 1× Moteur pas à pas avec driver
+
+### Connexions détaillées
+- **Écran LCD 2004 avec module I2C**:
+  - SDA → GPIO21 de l'ESP32
+  - SCL → GPIO22 de l'ESP32
+  - VCC → 5V
+  - GND → GND
+- **LED d'état**:
+  - Anode (+) → GPIO2 via résistance 220Ω
+  - Cathode (-) → GND
+- **Boutons poussoirs**:
+  - Bouton bleu → GPIO15 et GND
+  - Bouton vert → GPIO16 et GND
+- **Potentiomètres à glissière**:
+  - Potentiomètre horizontal (DIRECTION):
+    - Pin central → GPIO34 (ADC1_CH6)
+    - Pin gauche → GND
+    - Pin droit → 3.3V
+  - Potentiomètre vertical 1 (TRIM):
+    - Pin central → GPIO35 (ADC1_CH7)
+    - Pin inférieur → GND
+    - Pin supérieur → 3.3V
+  - Potentiomètre vertical 2 (LONGUEUR):
+    - Pin central → GPIO32 (ADC1_CH4)
+    - Pin inférieur → GND
+    - Pin supérieur → 3.3V
+- **Servomoteurs**:
+  - Servomoteur direction:
+    - Signal → GPIO25
+    - VCC → 5V externe
+    - GND → GND
+  - Servomoteur trim:
+    - Signal → GPIO26
+    - VCC → 5V externe
+    - GND → GND
+- **Moteur pas à pas (pour la longueur des lignes)**:
+  - IN1 → GPIO5
+  - IN2 → GPIO18
+  - IN3 → GPIO19
+  - IN4 → GPIO23
+  - VCC → 5V externe
+  - GND → GND
 
 ## Installation
 
@@ -130,8 +210,6 @@ Pour personnaliser votre système, modifiez les constantes dans le fichier `incl
 Le projet utilise les bibliothèques suivantes, configurées dans `platformio.ini` :
 
 - **ElegantOTA** : Pour les mises à jour OTA
-- **Adafruit GFX** et **Adafruit ILI9341** : Pour l'écran TFT
-- **Adafruit FT6206** : Pour l'écran tactile capacitif
 - **ESPAsyncWebServer** et **AsyncTCP** : Pour le serveur web asynchrone
 - **WiFi**, **SPI** et **Wire** : Pour la connectivité WiFi, SPI et I2C
 - **FreeRTOS** : Pour la gestion multitâche (intégré à l'ESP32)
@@ -156,28 +234,21 @@ build_flags =
 
 1. **Démarrage** : 
    - Au démarrage, le système initialise le module de journalisation
-   - Il affiche un message de bienvenue sur l'écran TFT
+   - Il affiche un message de bienvenue sur l'écran LCD
    - Il tente de se connecter au réseau WiFi configuré
    - En cas de succès, l'adresse IP attribuée s'affiche à l'écran
-   - L'interface tactile est initialisée avec le menu principal
+   - L'interface est initialisée avec le menu principal
 
-2. **Interface tactile** :
+2. **Interface à boutons** :
    - **Menu principal** : 
      - Tableau de bord : Accès aux données et graphiques
      - Paramètres : Configuration du système
      - Informations : Statut et version du système
-   - **Écran paramètres** :
-     - WiFi : Configuration de la connexion sans fil
-     - Affichage : Réglage de l'écran et des thèmes
-     - Système : Options générales du système
-     - OTA : Options de mise à jour
-     - Retour : Retour au menu principal
-   - **Écran tableau de bord** :
-     - Graphiques : Visualisation des données
-     - Données : Affichage des valeurs numériques
-     - Alarmes : État des alertes système
-     - Log : Journal des événements
-     - Retour : Retour au menu principal
+   - **Navigation** :
+     - Bouton bleu : Retour au menu principal
+     - Bouton vert : Navigation vers le haut
+     - Bouton rouge : Validation/Sélection
+     - Bouton jaune : Navigation vers le bas
 
 3. **Interface web** :
    - Page d'accueil : `http://[adresse-ip-esp32]/`
@@ -186,7 +257,7 @@ build_flags =
 4. **Mise à jour OTA** :
    - Accéder à l'URL de mise à jour dans un navigateur
    - Sélectionner le nouveau fichier firmware (.bin)
-   - L'écran TFT affiche la progression pendant la mise à jour
+   - L'écran LCD affiche la progression pendant la mise à jour
 
 5. **Surveillance du système** :
    - Le système surveille en permanence l'utilisation de la mémoire
@@ -206,32 +277,101 @@ Pour lancer la simulation :
 3. Démarrer la simulation avec la commande "Wokwi: Start Simulator"
 
 ## Structure du projet
-
-```plaintext
-kite_PiloteV3/
-├── src/                    # Code source
-│   ├── main.cpp            # Programme principal
-│   ├── display.cpp         # Module d'affichage
-│   ├── touch_ui.cpp        # Module d'interface tactile
-│   ├── task_manager.cpp    # Module de gestion des tâches
-│   ├── webserver.cpp       # Module du serveur web
-│   ├── logging.cpp         # Module de journalisation avancée
-│   └── fallback_html.h     # HTML de secours
-├── include/                # Fichiers d'en-tête
-│   ├── config.h            # Configuration centralisée
-│   ├── display.h           # En-tête du module d'affichage
-│   ├── touch_ui.h          # En-tête du module d'interface tactile
-│   ├── task_manager.h      # En-tête du module de gestion des tâches
-│   ├── kite_webserver.h    # En-tête du module serveur web
-│   └── logging.h           # En-tête du module de journalisation
-├── lib/                    # Bibliothèques spécifiques
-├── backup/                 # Sauvegardes de code
-├── docs-fr/                # Documentation en français
-├── platformio.ini          # Configuration PlatformIO
-├── diagram.json            # Configuration du circuit pour Wokwi
-├── wokwi.toml              # Configuration de simulation Wokwi
-└── README.md               # Ce fichier
-```
+/workspaces/kite_PiloteV3/
+├── include/                      # Fichiers d'en-tête C++
+│   ├── core/                     # Module noyau
+│   │   ├── config.h              # Configuration globale du système
+│   │   ├── task_manager.h        # Gestion des tâches FreeRTOS
+│   │   └── system.h              # Fonctions système générales
+│   ├── hardware/                 # Interface matérielle
+│   │   ├── sensors/              # Capteurs
+│   │   │   ├── imu.h             # Interface IMU
+│   │   │   ├── tension.h         # Capteur de tension
+│   │   │   ├── wind.h            # Anémomètre/girouette
+│   │   │   └── line_length.h     # Capteur longueur de ligne
+│   │   └── actuators/            # Actionneurs
+│   │       ├── servos.h          # Contrôle des servomoteurs
+│   │       ├── generator.h       # Contrôle du générateur
+│   │       └── winch.h           # Contrôle du treuil
+│   ├── communication/            # Module de communication
+│   │   ├── espnow_manager.h      # Gestion de la communication ESP-NOW
+│   │   ├── wifi_manager.h        # Gestion du WiFi
+│   │   └── protocols.h           # Définition des protocoles
+│   ├── control/                  # Algorithmes de contrôle
+│   │   ├── autopilot.h           # Autopilote principal
+│   │   ├── pid.h                 # Contrôleurs PID
+│   │   ├── trajectory.h          # Gestion des trajectoires
+│   │   └── safety.h              # Système de sécurité
+│   ├── ui/                       # Interface utilisateur
+│   │   ├── dashboard.h           # Interface tableau de bord
+│   │   ├── display.h             # Gestion de l'affichage LCD
+│   │   ├── inputs.h              # Gestion des entrées utilisateur
+│   │   └── webserver.h           # Serveur web pour interface
+│   └── utils/                    # Utilitaires
+│       ├── logging.h             # Système de journalisation
+│       ├── diagnostics.h         # Outils de diagnostic
+│       ├── terminal.h            # Terminal distant
+│       └── data_storage.h        # Stockage de données
+├── src/                          # Fichiers source C++
+│   ├── core/                     # Implémentation du noyau
+│   │   ├── config.cpp            # Implémentation configuration
+│   │   ├── task_manager.cpp      # Implémentation gestionnaire tâches
+│   │   ├── main.cpp              # Point d'entrée du programme
+│   │   └── system.cpp            # Implémentation fonctions système
+│   ├── hardware/                 # Implémentation matérielle
+│   │   ├── sensors/              # Implémentation capteurs
+│   │   │   ├── imu.cpp           # Implémentation IMU
+│   │   │   ├── tension.cpp       # Implémentation capteur tension
+│   │   │   ├── wind.cpp          # Implémentation capteur vent
+│   │   │   └── line_length.cpp   # Implémentation capteur longueur
+│   │   └── actuators/            # Implémentation actionneurs
+│   │       ├── servos.cpp        # Implémentation servomoteurs
+│   │       ├── generator.cpp     # Implémentation générateur
+│   │       └── winch.cpp         # Implémentation treuil
+│   ├── communication/            # Implémentation communication
+│   │   ├── espnow_manager.cpp    # Implémentation ESP-NOW
+│   │   ├── wifi_manager.cpp      # Implémentation WiFi
+│   │   └── protocols.cpp         # Implémentation protocoles
+│   ├── control/                  # Implémentation contrôle
+│   │   ├── autopilot.cpp         # Implémentation autopilote
+│   │   ├── pid.cpp               # Implémentation PID
+│   │   ├── trajectory.cpp        # Implémentation trajectoires
+│   │   └── safety.cpp            # Implémentation sécurité
+│   ├── ui/                       # Implémentation UI
+│   │   ├── dashboard.cpp         # Implémentation tableau de bord
+│   │   ├── display.cpp           # Implémentation affichage
+│   │   ├── inputs.cpp            # Implémentation entrées
+│   │   └── webserver.cpp         # Implémentation serveur web
+│   └── utils/                    # Implémentation utilitaires
+│       ├── logging.cpp           # Implémentation journalisation
+│       ├── diagnostics.cpp       # Implémentation diagnostic
+│       ├── terminal.cpp          # Implémentation terminal distant
+│       └── data_storage.cpp      # Implémentation stockage données
+├── data/                         # Fichiers pour SPIFFS (web)
+│   ├── css/                      # Styles CSS
+│   │   └── style.css             # Feuille de style principale
+│   ├── js/                       # Scripts JavaScript
+│   │   ├── dashboard.js          # Scripts pour tableau de bord
+│   │   └── controls.js           # Scripts pour contrôles
+│   ├── img/                      # Images
+│   │   └── logo.png              # Logo du projet
+│   ├── fonts/                    # Polices
+│   ├── dashboard.html            # Interface principale
+│   ├── config.html               # Page de configuration
+│   ├── diagnostic.html           # Page de diagnostic
+│   └── index.html                # Page d'accueil
+├── test/                         # Tests unitaires et d'intégration
+│   ├── test_sensors.cpp          # Tests des capteurs
+│   ├── test_actuators.cpp        # Tests des actionneurs
+│   ├── test_control.cpp          # Tests des algorithmes de contrôle
+│   └── test_communication.cpp    # Tests de communication
+├── lib/                          # Bibliothèques externes
+├── platformio.ini                # Configuration PlatformIO
+└── docs-fr/                      # Documentation
+    ├── projet_kite_complet.md    # Documentation complète
+    ├── manuel_utilisateur.md     # Guide utilisateur
+    ├── guide_developpeur.md      # Guide développeur
+    └── schemas/                  # Diagrammes et schémas
 
 ## Optimisations et améliorations
 
@@ -259,8 +399,8 @@ Le projet inclut plusieurs améliorations pour assurer la performance et la stab
 
 4. **Protection contre les corruptions de mémoire** :
    - Vérifications de validité des pointeurs et indices de tableaux
-   - Gestion des exceptions dans les opérations tactiles
-   - Actions différées pour l'interface tactile
+   - Gestion des exceptions pour la sécurité des opérations
+   - Actions différées pour les opérations non-critiques
    - Validation des données avant traitement
 
 5. **Interface web améliorée** :
@@ -269,11 +409,11 @@ Le projet inclut plusieurs améliorations pour assurer la performance et la stab
    - Génération HTML optimisée (sans SPIFFS)
    - Buffers de taille fixe pour les réponses HTTP
 
-6. **Interface tactile plus fiable** :
-   - Mécanisme d'action différée pour éviter les corruptions mémoire
-   - Protection contre les appels récursifs de callbacks
+6. **Interface à boutons fiable** :
+   - Anti-rebond matériel et logiciel pour les boutons
    - Vérifications strictes des limites des tableaux
    - Elimination des `delay()` bloquants
+   - Navigation intuitive dans les menus LCD
 
 ## Développement
 
@@ -326,7 +466,7 @@ Le projet suit les conventions de codage définies dans `/docs-fr/`. Quelques pr
   - Surveillance de l'utilisation mémoire
 - **Architecture multitâche** : 
   - Tâche d'affichage (core 1, priorité élevée)
-  - Tâche de gestion tactile (core 1, priorité élevée)
+  - Tâche de gestion des boutons (core 1, priorité élevée)
   - Tâche de surveillance WiFi (core 0, priorité basse)
   - Tâche de surveillance système (core 0, priorité basse)
 - **Communication inter-tâches** :
@@ -345,8 +485,8 @@ Le projet suit les conventions de codage définies dans `/docs-fr/`. Quelques pr
 
 ### Problèmes courants
 
-- **Écran tactile non fonctionnel** : Vérifier le câblage I2C (SDA, SCL) et les connexions de l'écran tactile
-- **Interface tactile non réactive** : Vérifier que le contrôleur FT6206 est bien reconnu
+- **Écran LCD non fonctionnel** : Vérifier le câblage I2C (SDA, SCL) et les connexions de l'écran LCD
+- **Interface non réactive** : Vérifier que le module I2C est bien reconnu
 - **Problèmes de tâches FreeRTOS** : Vérifier les tailles de pile allouées dans config.h
 - **Connexion WiFi impossible** : Vérifier les identifiants dans le fichier config.h
 - **Port série sans affichage** : S'assurer que la vitesse est configurée à 115200 bauds
@@ -383,7 +523,7 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 ## Remerciements
 
 - Bibliothèque ElegantOTA pour les mises à jour sans fil
-- Adafruit pour les bibliothèques d'écran TFT et tactile FT6206
+- LiquidCrystal_I2C pour l'interface LCD
 - Communauté ESP32 et PlatformIO
 - Framework FreeRTOS pour la gestion multitâche
 
