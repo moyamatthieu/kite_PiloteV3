@@ -16,6 +16,7 @@
 #include "../../include/control/safety.h"
 #include "../../include/hardware/actuators/servos.h"
 #include "../../include/hardware/sensors/wind.h"
+#include <cmath> // Pour sqrt et autres fonctions mathématiques
 
 // Variables statiques
 static AutopilotParameters autopilotParams;
@@ -377,14 +378,14 @@ static void updateConfidence(const IMUData& imuData) {
   // Pour l'instant, c'est une version simplifiée
   
   // Facteur 1: Stabilité des données IMU
-  float gyroMagnitude = sqrt(sq(imuData.gyroX) + sq(imuData.gyroY) + sq(imuData.gyroZ));
+  float gyroMagnitude = std::sqrt(std::pow(imuData.rollRate, 2) + std::pow(imuData.pitchRate, 2) + std::pow(imuData.yawRate, 2));
   
   // Réduire la confiance si les gyroscopes montrent trop de mouvement
   if (gyroMagnitude > 200) {
-    autopilotState.confidence = max(30, autopilotState.confidence - 5);
+    autopilotState.confidence = std::max(30, autopilotState.confidence - 5);
   } else {
     // Augmenter lentement la confiance si tout est stable
-    autopilotState.confidence = min(100, autopilotState.confidence + 1);
+    autopilotState.confidence = std::min(100, autopilotState.confidence + 1);
   }
   
   // Autres facteurs de confiance pourraient être ajoutés ici

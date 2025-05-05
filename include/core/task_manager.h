@@ -19,9 +19,7 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 #include "../include/config.h"    // Inclure le fichier config.h pour utiliser les constantes communes
-#include "../include/display.h"
-#include "../include/touch_ui.h"
-#include "../include/kite_webserver.h"
+#include "../hardware/io/display.h"
 
 // Priorités des tâches (utilisation des constantes définies dans config.h)
 #define TASK_PRIORITY_DISPLAY        DISPLAY_TASK_PRIORITY
@@ -67,7 +65,7 @@ class TaskManager {
     ~TaskManager();
     
     // Initialisation du gestionnaire de tâches
-    void begin(DisplayManager* display, TouchUIManager* touchUI, AsyncWebServer* server);
+    void begin(DisplayManager* display, AsyncWebServer* server);
     
     // Démarrage des tâches
     void startTasks();
@@ -96,7 +94,6 @@ class TaskManager {
     
     // Références aux objets globaux
     static DisplayManager* displayManager;
-    static TouchUIManager* touchUIManager;
     static AsyncWebServer* webServer;
     
     // État du gestionnaire

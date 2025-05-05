@@ -14,14 +14,13 @@
 #define configUSE_TRACE_FACILITY 1
 #define configUSE_STATS_FORMATTING_FUNCTIONS 1
 
-#include "../include/task_manager.h"
+#include "../core/task_manager.h"
 #include "../include/logging.h"
 
 // Initialisation des variables statiques
 QueueHandle_t TaskManager::messageQueue = nullptr;
 SemaphoreHandle_t TaskManager::displayMutex = nullptr;
 DisplayManager* TaskManager::displayManager = nullptr;
-TouchUIManager* TaskManager::touchUIManager = nullptr;
 AsyncWebServer* TaskManager::webServer = nullptr;
 
 // Structure pour les informations de performance des tâches
@@ -59,15 +58,13 @@ TaskManager::~TaskManager() {
 /**
  * Initialise le gestionnaire de tâches avec les références aux objets nécessaires
  * @param display Référence au gestionnaire d'affichage
- * @param touchUI Référence au gestionnaire d'interface tactile
  * @param server Référence au serveur web
  */
-void TaskManager::begin(DisplayManager* display, TouchUIManager* touchUI, AsyncWebServer* server) {
+void TaskManager::begin(DisplayManager* display, AsyncWebServer* server) {
   LOG_INFO("TASK", "Initialisation du gestionnaire de tâches");
   
   // Stocker les références aux objets
   displayManager = display;
-  touchUIManager = touchUI;
   webServer = server;
   
   // Créer la file d'attente pour la communication inter-tâches
@@ -107,17 +104,6 @@ void TaskManager::startTasks() {
     nullptr,                       // Paramètres
     TASK_PRIORITY_DISPLAY,         // Priorité
     &displayTaskHandle,            // Handle
-    1                              // Core (1 = Application Core)
-  );
-  
-  // Créer et démarrer la tâche de gestion tactile
-  xTaskCreatePinnedToCore(
-    touchTask,                     // Fonction de tâche
-    "TouchTask",                   // Nom de la tâche
-    STACK_SIZE_TOUCH,              // Taille de la pile
-    nullptr,                       // Paramètres
-    TASK_PRIORITY_TOUCH,           // Priorité
-    &touchTaskHandle,              // Handle
     1                              // Core (1 = Application Core)
   );
   
@@ -164,11 +150,6 @@ void TaskManager::stopTasks() {
   if (displayTaskHandle != nullptr) {
     vTaskDelete(displayTaskHandle);
     displayTaskHandle = nullptr;
-  }
-  
-  if (touchTaskHandle != nullptr) {
-    vTaskDelete(touchTaskHandle);
-    touchTaskHandle = nullptr;
   }
   
   if (wifiMonitorTaskHandle != nullptr) {
@@ -285,57 +266,6 @@ void TaskManager::displayTask(void* parameter) {
     } else {
       // Réinitialiser lastWakeTime si l'exécution a pris trop de temps
       lastWakeTime = xTaskGetTickCount();
-    }
-  }
-}
-
-/**
- * Tâche pour la gestion des événements tactiles - exécution sur le core 1 (version optimisée)
- * @param parameter Paramètres de la tâche (non utilisés)
- */
-void TaskManager::touchTask(void* parameter) {
-  // Commencer avec un délai plus court pour initialisation
-  vTaskDelay(pdMS_TO_TICKS(200)); // Réduit de 500 à 200ms
-  
-  TickType_t lastWakeTime = xTaskGetTickCount();
-  
-  while (true) {
-    unsigned long startTime = millis();
-    
-    // Optimisation: vérifier d'abord si le traitement est nécessaire avant de prendre le mutex
-    if (touchUIManager != nullptr && displayManager != nullptr && 
-        displayManager->isTouchInitialized() && displayManager->touched()) {
-        
-      // Prendre le sémaphore avec un timeout plus court
-      if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(30)) == pdTRUE) {
-        // Traiter les événements tactiles avec protection
-        try {
-          touchUIManager->processTouch();
-        } catch (...) {
-          LOG_ERROR("TOUCH", "Exception dans processTouch()");
-        }
-        
-        // Libérer le sémaphore immédiatement
-        xSemaphoreGive(displayMutex);
-      }
-    }
-    
-    // Mettre à jour les métriques de performance
-    unsigned long executionTime = millis() - startTime;
-    touchMetrics.lastExecutionTime = executionTime;
-    touchMetrics.totalExecutionTime += executionTime;
-    touchMetrics.executionCount++;
-    if (executionTime > touchMetrics.maxExecutionTime) {
-      touchMetrics.maxExecutionTime = executionTime;
-    }
-    
-    // Utiliser vTaskDelayUntil avec sécurité anti-overflow
-    if (pdMS_TO_TICKS(TOUCH_CHECK_INTERVAL) > executionTime) {
-      vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(TOUCH_CHECK_INTERVAL));
-    } else {
-      lastWakeTime = xTaskGetTickCount();
-      // Ajouter un petit délai pour éviter une boucle trop rapide
-      vTaskDelay(pdMS_TO_TICKS(5));
     }
   }
 }

@@ -52,7 +52,8 @@
 #define STEPPER_IN4       23       // Pin IN4 du moteur pas à pas -> stepper1:B-
 
 // Configuration du pilote automatique
-#define AUTOPILOT_OFF     0        // Mode pilote automatique désactivé
+#define AUTOPILOT_DISABLED 0        // Mode pilote automatique désactivé
+#undef AUTOPILOT_OFF
 #define AUTOPILOT_ON      1        // Mode pilote automatique activé
 #define AUTOPILOT_SMOOTH_FACTOR 0.8  // Facteur de lissage pour les transitions du pilote automatique
 #define POT_CHANGE_THRESHOLD   5    // Seuil de changement pour détecter une action sur un potentiomètre
@@ -136,7 +137,9 @@
 #define SYSTEM_TASK_STACK_SIZE    3072    // Réduit pour optimisation mémoire
 
 // Configuration mémoire
-#define USE_STATIC_MEMORY          true    // Utiliser des allocations statiques quand possible
+#ifndef MEMORY_OPTIMIZATION_ENABLED
+#define MEMORY_OPTIMIZATION_ENABLED true // Active les optimisations de mémoire
+#endif
 #define STRING_BUFFER_SIZE         128     // Taille des buffers pour les chaînes de caractères
 #define LOG_BUFFER_SIZE            192     // Taille des buffers de logging
 #define MAX_DISPLAY_BUFFER_SIZE    128     // Réduit - LCD a besoin de moins de mémoire que TFT
@@ -149,7 +152,6 @@
 
 // Configuration de FreeRTOS
 #define configMAX_TASKS                       15  // Optimisation ressources
-#define MEMORY_OPTIMIZATION_ENABLED           true // Active les optimisations de mémoire
 
 // Configuration de FreeRTOS pour les statistiques de tâches
 #define configUSE_TRACE_FACILITY              1

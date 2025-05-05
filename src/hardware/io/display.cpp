@@ -10,7 +10,7 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../include/display.h"
+#include "../../hardware/io/display.h"
 #include "../include/logging.h"
 #include <WiFi.h>
 

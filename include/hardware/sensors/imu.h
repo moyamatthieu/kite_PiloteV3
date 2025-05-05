@@ -14,6 +14,7 @@
 #define IMU_H
 
 #include <Arduino.h>
+#include <Wire.h> // Include for TwoWire and Wire object
 #include "../../core/config.h"
 
 // === DÉFINITION DES TYPES ===

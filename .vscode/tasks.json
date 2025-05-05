@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Save to GitHub",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Git Add",
+                "Git Commit",
+                "Git Push"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Git Add",
+            "type": "shell",
+            "command": "git add .",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git Commit",
+            "type": "shell",
+            "command": "git commit -m \"${input:commitMessage}\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Git Push",
+            "type": "shell",
+            "command": "git push -u origin main",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "commitMessage",
+            "type": "promptString",
+            "description": "Message de commit",
+            "default": "Mise à jour du projet"
+        }
+    ]
+}
