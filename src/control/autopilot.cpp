@@ -10,12 +10,12 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../../include/control/autopilot.h"
-#include "../../include/utils/logging.h"
-#include "../../include/control/trajectory.h"
-#include "../../include/control/safety.h"
-#include "../../include/hardware/actuators/servos.h"
-#include "../../include/hardware/sensors/wind.h"
+#include "control/autopilot.h"
+#include "utils/logging.h"
+#include "control/trajectory.h"
+#include "control/safety.h"
+#include "hardware/actuators/servo.h"
+#include "hardware/sensors/wind.h"
 #include <cmath> // Pour sqrt et autres fonctions mathématiques
 
 // Variables statiques

@@ -1,5 +1,21 @@
 /*
   -----------------------
+  Kite PiloteV3 - Template de Fichier
+  -----------------------
+
+  Objectif : Décrire les objectifs et les choix d'architecture pour ce fichier.
+  
+  Instructions :
+  - Ajouter des commentaires pour expliquer les sections importantes.
+  - Respecter les conventions de codage définies dans le projet.
+  - Documenter les fonctions et les classes pour faciliter la maintenance.
+
+  Date : 6 mai 2025
+  Auteur : Équipe Kite PiloteV3
+*/
+
+/*
+  -----------------------
   Kite PiloteV3 - Programme principal
   -----------------------
   
@@ -28,16 +44,22 @@
 // === INCLUSIONS MODULES HARDWARE ===
 // Capteurs
 #include "hardware/sensors/imu.h"
+#include "hardware/sensors/line_length.h" // Capteur de longueur de ligne
+#include "hardware/sensors/tension.h"     // Capteur de tension
+#include "hardware/sensors/wind.h"        // Capteur de vent
 // Actionneurs
-#include "hardware/actuators/servo.h"
+#include "hardware/actuators/servo.h"     // Servomoteurs
+#include "hardware/actuators/generator.h" // Actionneur générateur
+#include "hardware/actuators/winch.h"     // Treuil
 // E/S
-#include "hardware/io/display.h"
-#include "hardware/io/button_ui.h"
+#include "../../include/hardware/io/ui_manager.h"
+#include "../../include/hardware/io/button_ui.h"
 #include "hardware/io/potentiometer_manager.h"
 
 // === INCLUSIONS MODULES COMMUNICATION ===
 #include "communication/kite_webserver.h"
 #include "communication/api.h"
+#include "communication/wifi_manager.h"
 
 // === INCLUSIONS MODULES CONTROL ===
 #include "control/autopilot.h"
@@ -45,6 +67,12 @@
 // === INCLUSIONS MODULES UI ===
 #include "ui/dashboard.h"
 #include "ui/presenter.h"
+#include "ui/webserver.h"                 // Serveur web pour l'interface utilisateur
+
+// === INCLUSIONS MODULES UTILS ===
+#include "utils/data_storage.h"           // Gestion du stockage des données
+#include "utils/diagnostics.h"            // Diagnostics système
+#include "utils/terminal.h"               // Terminal distant
 
 // === DÉFINITION DES VARIABLES GLOBALES ===
 
@@ -54,6 +82,8 @@ ButtonUIManager buttonUI(&display);           // Gestionnaire de l'interface uti
 PotentiometerManager potManager;              // Gestionnaire des potentiomètres
 AsyncWebServer server(SERVER_PORT);           // Serveur web asynchrone
 TaskManager taskManager;                      // Gestionnaire de tâches multiples
+UIManager uiManager;                          // Gestionnaire de l'interface utilisateur
+WiFiManager wifiManager;                      // Gestionnaire WiFi
 
 // Variables d'état système
 bool wifiConnected = false;                  // État de la connexion WiFi
@@ -224,13 +254,11 @@ void setupHardware() {
  * Configure et démarre les tâches FreeRTOS
  */
 void setupTasks() {
-  // Initialiser le gestionnaire de tâches
-  taskManager.begin(&display, &buttonUI, &server);
+    // Initialiser le gestionnaire de tâches avec les bons arguments
+    taskManager.begin(&uiManager, &wifiManager);
+    taskManager.startTasks();
   
-  // Démarrer les tâches
-  taskManager.startTasks();
-  
-  LOG_INFO("TASKS", "Tâches FreeRTOS démarrées");
+    LOG_INFO("TASKS", "Tâches FreeRTOS démarrées");
 }
 
 /**

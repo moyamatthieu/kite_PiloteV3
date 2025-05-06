@@ -108,4 +108,19 @@ private:
     void checkDisplayStatus();
 };
 
+class DisplayManager {
+public:
+    DisplayManager();
+    bool isInitialized();
+    void setupI2C();
+    bool initLCD();
+    void displayMessage(const char* title, const char* message);
+    void displayWiFiInfo(const char* ssid, IPAddress ip);
+    void displayWelcomeScreen(bool simpleMode);
+    void createCustomChars();
+    void updateMainDisplay();
+    void displayOTAProgress(size_t current, size_t total);
+    void displayOTAStatus(bool success);
+};
+
 #endif // UI_MANAGER_H

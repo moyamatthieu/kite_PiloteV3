@@ -1,9 +1,10 @@
-#include "../include/kite_webserver.h"
+#include "communication/kite_webserver.h"
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #include "fallback_html.h"
 #include "../include/config.h"
+#include "core/config.h"
 
 // Mise en cache des valeurs pour éviter les régénérations fréquentes
 static char jsonBuffer[256]; // Buffer statique pour JSON

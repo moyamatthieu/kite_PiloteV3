@@ -27,6 +27,8 @@
 #define SYS_STATE_UPDATE          5
 #define SYS_STATE_CALIBRATION     6
 
+#define SYS_OK 0
+
 // === TYPES DE DONNÉES ===
 
 // Structure pour les informations système
@@ -43,6 +45,8 @@ typedef struct {
   char lastErrorMessage[64];      // Dernier message d'erreur
 } SystemInfo;
 
+typedef int SystemErrorCode;
+
 // === FONCTIONS PUBLIQUES ===
 
 // Initialiser le système
@@ -54,8 +58,8 @@ SystemInfo getSystemInfo();
 // Mettre à jour les informations système
 void updateSystemInfo();
 
-// Redémarrer le système
-void systemRestart();
+// Redémarrer le système avec un délai facultatif
+void systemRestart(unsigned long delayMs = 0);
 
 // Vérifier la santé du système
 bool systemHealthCheck();
@@ -77,5 +81,13 @@ void clearSystemErrors();
 
 // Gérer une erreur système
 void handleSystemError(const char* errorSource, const char* errorMessage);
+
+// Vérifier si le système est en bonne santé
+bool isSystemHealthy();
+
+// Alimenter les watchdogs
+void feedWatchdogs();
+
+const char* systemErrorToString(SystemErrorCode errorCode);
 
 #endif // SYSTEM_H

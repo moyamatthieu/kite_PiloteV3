@@ -1,5 +1,21 @@
 /*
   -----------------------
+  Kite PiloteV3 - Template de Fichier
+  -----------------------
+
+  Objectif : Décrire les objectifs et les choix d'architecture pour ce fichier.
+  
+  Instructions :
+  - Ajouter des commentaires pour expliquer les sections importantes.
+  - Respecter les conventions de codage définies dans le projet.
+  - Documenter les fonctions et les classes pour faciliter la maintenance.
+
+  Date : 6 mai 2025
+  Auteur : Équipe Kite PiloteV3
+*/
+
+/*
+  -----------------------
   Kite PiloteV3 - Module de gestion des tâches (Implémentation)
   -----------------------
   
@@ -14,8 +30,10 @@
 #define configUSE_TRACE_FACILITY 1
 #define configUSE_STATS_FORMATTING_FUNCTIONS 1
 
-#include "../core/task_manager.h"
-#include "../include/utils/logging.h"
+#include "core/task_manager.h"
+#include "utils/logging.h"
+#include "communication/wifi_manager.h"
+#include "../../include/communication/wifi_manager.h"
 
 // Initialisation des variables statiques
 QueueHandle_t TaskManager::messageQueue = nullptr;

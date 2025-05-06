@@ -10,7 +10,8 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../include/logging.h"
+#include "core/logging.h"
+#include "core/config.h"
 #include <stdarg.h>
 #include "../include/config.h"
 
