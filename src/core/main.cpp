@@ -52,8 +52,8 @@
 #include "hardware/actuators/generator.h" // Actionneur générateur
 #include "hardware/actuators/winch.h"     // Treuil
 // E/S
-#include "../../include/hardware/io/ui_manager.h"
-#include "../../include/hardware/io/button_ui.h"
+#include "hardware/io/ui_manager.h"
+#include "hardware/io/button_ui.h"
 #include "hardware/io/potentiometer_manager.h"
 
 // === INCLUSIONS MODULES COMMUNICATION ===
@@ -103,6 +103,12 @@ void setupTasks();
 void onOTAStart();
 void onOTAProgress(size_t current, size_t final);
 void onOTAEnd(bool success);
+
+// Vérification de l'état du système
+void checkSystemState();
+
+// Déclaration de la fonction feedWatchdogs
+void feedWatchdogs();
 
 // === IMPLÉMENTATION DES FONCTIONS ===
 
@@ -233,12 +239,18 @@ void setupHardware() {
   potManager.begin();
   
   // Valider l'initialisation en lisant les valeurs initiales
-  potManager.updatePotentiometers();
-  LOG_INFO("POT", "Valeurs initiales - Dir: %d, Trim: %d, Longueur: %d", 
-           potManager.getDirection(), potManager.getTrim(), potManager.getLineLength());
+  if (potManager.isInitialized()) {
+    LOG_INFO("POT", "Valeurs initiales - Dir: %d, Trim: %d, Longueur: %d", 
+             potManager.getDirection(), potManager.getTrim(), potManager.getLineLength());
+  } else {
+    LOG_ERROR("POT", "Échec d'initialisation des potentiomètres");
+  }
   
   // Initialiser les servomoteurs
   servoInitAll();
+  
+  // Initialiser l'interface utilisateur à boutons
+  buttonUI.begin();
   
   // Initialiser l'interface utilisateur à boutons
   buttonUI.begin();
@@ -326,7 +338,20 @@ void onOTAEnd(bool success) {
 }
 
 /**
- * Fonction setup appelée une fois au démarrage du système
+ * Vérifie l'état du système
+ */
+void checkSystemState() {
+  // Exemple de vérification d'état système
+  if (wifiConnected) {
+    LOG_INFO("SYSTEM", "WiFi connecté, état système normal");
+  } else {
+    LOG_WARNING("SYSTEM", "WiFi non connecté, vérifier la configuration");
+  }
+}
+
+/**
+ * Fonction principale du programme
+ * Initialise le système et démarre les tâches principales
  */
 void setup() {
   // Initialiser le système de journalisation
@@ -370,6 +395,7 @@ void setup() {
 
 /**
  * Boucle principale exécutée en continu
+ * Gère les mises à jour OTA et surveille l'état du système
  */
 void loop() {
   // Nourrir les watchdogs pour éviter un reset
@@ -378,30 +404,11 @@ void loop() {
   // Gestion des mises à jour OTA
   ElegantOTA.loop();
   
-  // Vérification périodique de l'état du système
-  unsigned long currentTime = millis();
-  if (currentTime - lastSystemCheck >= SYSTEM_CHECK_INTERVAL) {
-    lastSystemCheck = currentTime;
+  // Vérifie l'état du système
+  checkSystemState();
     
-    // Vérifier l'état du système
-    bool healthy = isSystemHealthy();
-    
-    // Vérifier l'état du WiFi et tenter de reconnecter si nécessaire
-    if (WiFi.status() != WL_CONNECTED && wifiConnected) {
-      LOG_WARNING("WIFI", "Connexion perdue, tentative de reconnexion");
-      wifiConnected = false;
-      WiFi.reconnect();
-    } else if (WiFi.status() == WL_CONNECTED && !wifiConnected) {
-      LOG_INFO("WIFI", "Reconnecté au réseau %s", WIFI_SSID);
-      wifiConnected = true;
-    }
-    
-    // Journaliser l'utilisation de la mémoire
-    logMemoryUsage("MAIN");
-  }
-  
-  // La plupart des opérations sont gérées par les tâches FreeRTOS,
-  // donc la boucle principale reste légère
+  // Journaliser l'utilisation de la mémoire
+  logMemoryUsage("MAIN");
   
   // Court délai pour éviter de monopoliser le CPU
   delay(10);

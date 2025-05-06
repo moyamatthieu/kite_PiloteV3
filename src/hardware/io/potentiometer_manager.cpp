@@ -10,8 +10,8 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../include/potentiometer_manager.h"
-#include "../include/logging.h"
+#include "hardware/io/potentiometer_manager.h"
+#include "core/logging.h"
 
 /**
  * Constructeur de la classe PotentiometerManager
@@ -130,86 +130,19 @@ int PotentiometerManager::smoothValue(int newValue, int oldValue) {
 /**
  * Met à jour les valeurs des potentiomètres
  */
-void PotentiometerManager::updatePotentiometers() {
-  unsigned long currentTime = millis();
-  
-  // Limiter la fréquence de mise à jour
-  if (currentTime - lastUpdateTime < POT_READ_INTERVAL) {
-    return;
-  }
-  
-  lastUpdateTime = currentTime;
-  
-  // Lecture du potentiomètre de direction
-  direction.rawValue = readPotentiometer(POT_DIRECTION);
-  direction.hasChanged = abs(direction.rawValue - direction.lastRawValue) > POT_DEADZONE;
-  direction.lastRawValue = direction.rawValue;
-  
-  if (direction.hasChanged) {
-    // Appliquer la zone morte pour la position centrale
-    int centerValue = (directionMax + directionMin) / 2;
-    int valueWithDeadzone = applyDeadzone(direction.rawValue, centerValue);
-    
-    // Lisser la valeur
-    direction.smoothValue = smoothValue(valueWithDeadzone, direction.smoothValue);
-    
-    // Mapper la valeur dans la plage -100 à +100
-    if (direction.smoothValue < centerValue) {
-      // Négatif (gauche)
-      direction.mappedValue = map(direction.smoothValue, directionMin, centerValue, -100, 0);
-    } else {
-      // Positif (droite)
-      direction.mappedValue = map(direction.smoothValue, centerValue, directionMax, 0, 100);
+bool PotentiometerManager::updatePotentiometers() {
+    unsigned long currentTime = millis();
+    if (currentTime - lastUpdateTime < POT_READ_INTERVAL) {
+        return false; // Pas de mise à jour
     }
+    lastUpdateTime = currentTime;
     
-    // Limiter à la plage -100 à +100
-    direction.mappedValue = constrain(direction.mappedValue, -100, 100);
-  }
-  
-  // Lecture du potentiomètre de trim
-  trim.rawValue = readPotentiometer(POT_TRIM);
-  trim.hasChanged = abs(trim.rawValue - trim.lastRawValue) > POT_DEADZONE;
-  trim.lastRawValue = trim.rawValue;
-  
-  if (trim.hasChanged) {
-    // Appliquer la zone morte pour la position centrale
-    int centerValue = (trimMax + trimMin) / 2;
-    int valueWithDeadzone = applyDeadzone(trim.rawValue, centerValue);
+    // Lecture des potentiomètres et mise à jour des valeurs
+    direction.rawValue = readPotentiometer(POT_DIRECTION);
+    trim.rawValue = readPotentiometer(POT_TRIM);
+    lineLength.rawValue = readPotentiometer(POT_LENGTH);
     
-    // Lisser la valeur
-    trim.smoothValue = smoothValue(valueWithDeadzone, trim.smoothValue);
-    
-    // Mapper la valeur dans la plage -100 à +100
-    if (trim.smoothValue < centerValue) {
-      // Négatif
-      trim.mappedValue = map(trim.smoothValue, trimMin, centerValue, -100, 0);
-    } else {
-      // Positif
-      trim.mappedValue = map(trim.smoothValue, centerValue, trimMax, 0, 100);
-    }
-    
-    // Limiter à la plage -100 à +100
-    trim.mappedValue = constrain(trim.mappedValue, -100, 100);
-  }
-  
-  // Lecture du potentiomètre de longueur de ligne
-  lineLength.rawValue = readPotentiometer(POT_LENGTH);
-  lineLength.hasChanged = abs(lineLength.rawValue - lineLength.lastRawValue) > POT_DEADZONE;
-  lineLength.lastRawValue = lineLength.rawValue;
-  
-  if (lineLength.hasChanged) {
-    // Lisser la valeur
-    lineLength.smoothValue = smoothValue(lineLength.rawValue, lineLength.smoothValue);
-    
-    // Mapper la valeur dans la plage 0 à 100
-    lineLength.mappedValue = map(lineLength.smoothValue, lineLengthMin, lineLengthMax, 0, 100);
-    
-    // Limiter à la plage 0 à 100
-    lineLength.mappedValue = constrain(lineLength.mappedValue, 0, 100);
-  }
-  
-  // Vérifier si un potentiomètre a été ajusté et désactiver le pilote automatique si nécessaire
-  checkAutoPilotStatus();
+    return true; // Mise à jour effectuée
 }
 
 /**

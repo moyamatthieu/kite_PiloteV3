@@ -10,8 +10,8 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../../include/hardware/io/ui_manager.h"
-#include "../../include/utils/logging.h"
+#include "hardware/io/ui_manager.h"
+#include "utils/logging.h" 
 #include <WiFi.h>
 
 // Caractères personnalisés pour l'affichage

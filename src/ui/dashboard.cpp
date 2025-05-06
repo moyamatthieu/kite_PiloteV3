@@ -101,8 +101,10 @@ bool dashboardUpdateKite(const IMUData& imuData) {
   
   dashboardData.kiteAltitude = sin(angleRad) * lineLength / 100.0f; // cm → m
   
-  // Calcul simpliste de la vitesse basé sur les données gyro
-  dashboardData.kiteSpeed = sqrt(sq(imuData.gyroX) + sq(imuData.gyroY) + sq(imuData.gyroZ)) * 0.01f;
+  // Calculer la vitesse du kite en fonction des données gyroscopiques
+  // Conversion des taux de rotation en une estimation de vitesse
+  // Correction : utilisation de rollRate, pitchRate, yawRate au lieu de gyroX, gyroY, gyroZ
+  dashboardData.kiteSpeed = sqrt(sq(imuData.rollRate) + sq(imuData.pitchRate) + sq(imuData.yawRate)) * 0.01f;
   
   // Puissance estimée basée sur la vitesse et la tension (formule simplifiée)
   dashboardData.kitePower = dashboardData.kiteSpeed * dashboardData.lineTension * 10.0f;

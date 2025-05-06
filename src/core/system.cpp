@@ -3,27 +3,31 @@
   Kite PiloteV3 - Module système (Implémentation)
   -----------------------
   
-  Implémentation des fonctions système de base pour Kite PiloteV3.
+  Implémentation des fonctions système de base.
   
   Version: 1.0.0
-  Date: 2 mai 2025
+  Date: 6 mai 2025
   Auteurs: Équipe Kite PiloteV3
 */
 
 #include "../../include/core/system.h"
 #include "../../include/utils/logging.h"
 #include <esp_system.h>
+#include <Arduino.h>
 
-// Variables statiques
+// Variables système globales
 static SystemInfo systemInfo;
 static unsigned long lastUpdateTime = 0;
 static bool systemInitialized = false;
+static uint8_t systemStatus = 0;
+static TaskHandle_t restartTaskHandle = NULL;
 
 // === IMPLÉMENTATION DES FONCTIONS ===
 
-bool systemInit() {
+SystemErrorCode systemInit() {
   if (systemInitialized) {
-    return true;
+    LOG_WARNING("SYS", "Système déjà initialisé");
+    return SYS_ALREADY_INITIALIZED;
   }
   
   // Initialiser la structure des informations système
@@ -39,12 +43,21 @@ bool systemInit() {
   systemInfo.hasWarning = false;
   memset(systemInfo.lastErrorMessage, 0, sizeof(systemInfo.lastErrorMessage));
   
+  // Initialiser le statut système
+  systemStatus = 100; // 100%
+  
+  // Configurer le watchdog
+  esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
+  
+  // Démarrer le watchdog pour la tâche principale
+  esp_task_wdt_add(NULL);
+  
   // Marquer le système comme initialisé et passer à l'état READY
   systemInitialized = true;
   systemInfo.systemState = SYS_STATE_READY;
   
   LOG_INFO("SYS", "Système initialisé avec succès");
-  return true;
+  return SYS_OK;
 }
 
 SystemInfo getSystemInfo() {
@@ -72,14 +85,93 @@ void updateSystemInfo() {
   lastUpdateTime = millis();
 }
 
-void systemRestart() {
-  LOG_WARNING("SYS", "Redémarrage du système demandé");
+void systemRestart(unsigned long delayMs) {
+  if (delayMs == 0) {
+    LOG_INFO("SYS", "Redémarrage immédiat du système");
+    delay(100);  // Petit délai pour permettre au log de s'afficher
+    ESP.restart();
+    return;
+  }
   
-  // Attendre un peu pour que le message puisse être transmis
-  delay(100);
+  // Supprimer l'ancienne tâche de redémarrage si elle existe
+  if (restartTaskHandle != NULL) {
+    vTaskDelete(restartTaskHandle);
+    restartTaskHandle = NULL;
+  }
   
-  // Redémarrer l'ESP32
+  // Créer une nouvelle tâche de redémarrage
+  BaseType_t result = xTaskCreate(
+    restartTask,            // Fonction de tâche
+    "RestartTask",          // Nom de la tâche
+    2048,                   // Taille de pile
+    (void*)delayMs,         // Paramètre
+    1,                      // Priorité
+    &restartTaskHandle      // Handle
+  );
+  
+  if (result != pdPASS) {
+    LOG_ERROR("SYS", "Échec de création de la tâche de redémarrage");
+    // Redémarrer immédiatement en cas d'échec
+    delay(100);
+    ESP.restart();
+  }
+}
+
+bool isSystemHealthy() {
+  return (systemStatus >= 80); // Considéré sain si >= 80%
+}
+
+const char* getSystemStatusString() {
+  if (systemStatus >= 90) return "Excellent";
+  if (systemStatus >= 80) return "Bon";
+  if (systemStatus >= 60) return "Correct";
+  if (systemStatus >= 40) return "Attention";
+  if (systemStatus >= 20) return "Critique";
+  return "Défaillant";
+}
+
+void feedWatchdogs() {
+  // Nourrir le watchdog matériel
+  esp_task_wdt_reset();
+}
+
+static void restartTask(void* parameters) {
+  unsigned long delayMs = (unsigned long)parameters;
+  
+  LOG_INFO("SYS", "Redémarrage prévu dans %lu ms", delayMs);
+  
+  // Attendre le délai spécifié
+  vTaskDelay(pdMS_TO_TICKS(delayMs));
+  
+  // Effectuer le redémarrage
+  LOG_INFO("SYS", "Redémarrage du système maintenant...");
+  delay(100);  // Petit délai pour permettre au log de s'afficher
+  
   ESP.restart();
+  
+  // Ne devrait jamais arriver ici
+  vTaskDelete(NULL);
+}
+
+const char* systemErrorToString(int code) {
+  switch ((SystemErrorCode)code) {
+    case SYS_OK:
+      return "Pas d'erreur";
+    case SYS_ALREADY_INITIALIZED:
+      return "Système déjà initialisé";
+    case SYS_INIT_FAILED:
+      return "Échec d'initialisation du système";
+    case SYS_OUT_OF_MEMORY:
+      return "Mémoire insuffisante";
+    case SYS_TIMEOUT:
+      return "Délai d'attente dépassé";
+    case SYS_NOT_INITIALIZED:
+      return "Système non initialisé";
+    case SYS_HARDWARE_ERROR:
+      return "Erreur matérielle";
+    default:
+      return "Erreur inconnue";
+  }
 }
 
 bool systemHealthCheck() {

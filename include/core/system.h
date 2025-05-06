@@ -27,9 +27,22 @@
 #define SYS_STATE_UPDATE          5
 #define SYS_STATE_CALIBRATION     6
 
-#define SYS_OK 0
+// Codes d'erreur système
+#define SYS_OK                    0    // Pas d'erreur
+#define SYS_ALREADY_INITIALIZED   1    // Système déjà initialisé
+#define SYS_INIT_FAILED           2    // Échec d'initialisation
+#define SYS_OUT_OF_MEMORY         3    // Mémoire insuffisante
+#define SYS_TIMEOUT               4    // Délai dépassé
+#define SYS_NOT_INITIALIZED       5    // Système non initialisé
+#define SYS_HARDWARE_ERROR        6    // Erreur matérielle
+
+// Configuration du watchdog
+#define WDT_TIMEOUT_SECONDS       5    // Timeout du watchdog en secondes
 
 // === TYPES DE DONNÉES ===
+
+// Type pour les codes d'erreur système
+typedef int SystemErrorCode;
 
 // Structure pour les informations système
 typedef struct {
@@ -45,12 +58,10 @@ typedef struct {
   char lastErrorMessage[64];      // Dernier message d'erreur
 } SystemInfo;
 
-typedef int SystemErrorCode;
-
 // === FONCTIONS PUBLIQUES ===
 
 // Initialiser le système
-bool systemInit();
+SystemErrorCode systemInit();
 
 // Obtenir les informations système actuelles
 SystemInfo getSystemInfo();
@@ -88,6 +99,7 @@ bool isSystemHealthy();
 // Alimenter les watchdogs
 void feedWatchdogs();
 
+// Convertir un code d'erreur en chaîne de caractères
 const char* systemErrorToString(SystemErrorCode errorCode);
 
 #endif // SYSTEM_H

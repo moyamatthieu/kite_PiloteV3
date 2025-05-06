@@ -10,8 +10,7 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#ifndef API_H
-#define API_H
+#pragma once
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
@@ -42,29 +41,23 @@ typedef struct {
 
 /**
  * Initialise l'API REST
- * @param server Référence au serveur web asynchrone
- * @return true si succès, false si échec
+ * @param server Serveur web asynchrone
+ * @return true si l'initialisation réussit, false sinon
  */
 bool apiInit(AsyncWebServer& server);
 
 /**
- * Active l'API REST
- * @param requireAuth Requiert une authentification si true
- * @return true si l'activation a réussi, false sinon
+ * Active ou désactive l'API
+ * @param enabled True pour activer, false pour désactiver
+ * @return true si l'opération réussit, false sinon
  */
-bool apiEnable(bool requireAuth = false);
+bool apiEnable(bool enabled);
 
 /**
- * Désactive l'API REST
- * @return true si succès, false si échec
+ * Obtient l'état d'activation de l'API
+ * @return True si l'API est activée, false sinon
  */
-bool apiDisable();
-
-/**
- * Vérifie si l'API est activée
- * @return true si activée, false sinon
- */
-bool apiIsEnabled();
+bool isApiEnabled();
 
 /**
  * Configure l'authentification pour l'API
@@ -119,4 +112,26 @@ String apiGenerateJsonResponse(void* data, const char* type);
  */
 bool apiRegisterEndpoint(const char* endpoint, const char* method, ArRequestHandlerFunction handler);
 
-#endif // API_H
+/**
+ * Gère les requêtes API pour le système
+ * @param request Requête web asynchrone
+ */
+void handleSystemApi(AsyncWebServerRequest* request);
+
+/**
+ * Gère les requêtes API pour les capteurs
+ * @param request Requête web asynchrone
+ */
+void handleSensorsApi(AsyncWebServerRequest* request);
+
+/**
+ * Gère les requêtes API pour le contrôle
+ * @param request Requête web asynchrone
+ */
+void handleControlApi(AsyncWebServerRequest* request);
+
+/**
+ * Gère les requêtes API pour le diagnostic
+ * @param request Requête web asynchrone
+ */
+void handleDiagnosticsApi(AsyncWebServerRequest* request);

@@ -530,3 +530,54 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 ## Date de dernière mise à jour
 
 1 mai 2025
+
+# Instructions pour les Interactions Futures
+
+## Contexte du Projet
+
+- **Date actuelle** : 6 mai 2025
+- **Système d'exploitation** : Linux
+- **Structure du projet** :
+  - Le projet est organisé en plusieurs dossiers : `src`, `include`, `docs-fr`, `data`, etc.
+  - Les fichiers principaux incluent des modules pour la communication, le contrôle, le matériel, l'interface utilisateur et les utilitaires.
+  - Une documentation détaillée est disponible dans le dossier `docs-fr`.
+
+## Directives Générales
+
+1. **Respect de la Structure** :
+   - Toute modification doit respecter l'architecture existante du projet.
+   - Les fichiers doivent être placés dans les dossiers appropriés (ex : `src/communication` pour les modules de communication).
+
+2. **Documentation** :
+   - Ajouter des commentaires clairs et descriptifs pour chaque modification.
+   - Mettre à jour la documentation dans `docs-fr` si nécessaire.
+
+3. **Tests** :
+   - Vérifier que les tests dans le dossier `test/` couvrent les nouvelles fonctionnalités ou corrections.
+   - Ajouter de nouveaux tests si nécessaire.
+
+4. **Gestion Git** :
+   - Utiliser les tâches Git disponibles pour ajouter, valider et pousser les modifications.
+   - Respecter les conventions de commit (ex : `[Feature] Ajout d'une nouvelle fonctionnalité`).
+
+5. **Collaboration** :
+   - Toutes les interactions doivent être basées sur le contexte actuel du projet.
+   - Les réponses doivent être précises, concises et adaptées au projet.
+
+## Utilisation des Outils
+
+- **Exploration du Projet** :
+  - Utiliser les outils disponibles pour rechercher, lire ou modifier les fichiers.
+  - S'assurer que les modifications sont conformes aux bonnes pratiques.
+
+- **Exécution des Tâches** :
+  - Utiliser les tâches prédéfinies pour gérer les interactions avec Git.
+  - Vérifier l'état du projet après chaque modification.
+
+- **Communication** :
+  - Fournir des explications détaillées pour chaque action ou modification.
+  - Répondre aux questions en utilisant le contexte du projet.
+
+## Objectif
+
+L'objectif est de garantir que toutes les interactions futures respectent les directives ci-dessus et contribuent à l'amélioration continue du projet.

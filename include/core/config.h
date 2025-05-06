@@ -32,18 +32,19 @@
 #define POT_TRIM          35       // Pin pour le potentiomètre de trim (ADC1_CH7) -> pot2:SIG
 #define POT_LENGTH        32       // Pin pour le potentiomètre de longueur des lignes (ADC1_CH4) -> pot3:SIG
 
-// Pins GPIO pour LED et boutons (connexions dans diagram.json)
+// Pins GPIO pour LED
 #define LED_PIN           2        // Pin pour la LED indicatrice -> led1:A via r1
 
-// Pins pour les boutons (mis à jour selon diagram.json)
-#define BUTTON_BLUE_PIN   27       // Pin pour le bouton bleu (retour) -> btn1:2.l
-#define BUTTON_GREEN_PIN  12       // Pin pour le bouton vert (navigation haut) -> btn2:2.l
-#define BUTTON_RED_PIN    26       // Pin pour le bouton rouge (validation) -> btn4:2.l
-#define BUTTON_YELLOW_PIN 14       // Pin pour le bouton jaune (navigation bas) -> btn3:2.l
+// Pins pour les boutons de l'interface utilisateur (connexions dans diagram.json)
+#define BUTTON_UP_PIN       12       // Pin pour le bouton de navigation haut (vert) -> btn2:2.l
+#define BUTTON_DOWN_PIN     14       // Pin pour le bouton de navigation bas (jaune) -> btn3:2.l
+#define BUTTON_SELECT_PIN   26       // Pin pour le bouton de sélection (rouge) -> btn4:2.l
+#define BUTTON_BACK_PIN     27       // Pin pour le bouton de retour (bleu) -> btn1:2.l
 
-// Pins pour les servomoteurs (mis à jour selon diagram.json)
-#define SERVO_DIRECTION_PIN 25     // Pin pour le servomoteur de direction -> servo2:PWM
-#define SERVO_TRIM_PIN     33      // Pin pour le servomoteur de trim -> servo1:PWM
+// Pins pour les servomoteurs (connexions dans diagram.json)
+#define SERVO_DIRECTION_PIN 25       // Pin pour le servomoteur de direction -> servo2:PWM
+#define SERVO_TRIM_PIN      33       // Pin pour le servomoteur de trim -> servo1:PWM
+#define SERVO_LINEMOD_PIN   13       // Pin pour le servomoteur de modulation de ligne
 
 // Pins pour le moteur pas à pas (connexions dans diagram.json)
 #define STEPPER_IN1       5        // Pin IN1 du moteur pas à pas -> stepper1:A+
@@ -113,8 +114,8 @@
 
 // Configuration ADC
 #define ADC_RESOLUTION            4095    // Résolution ADC (12 bits pour ESP32)
-#define ADC_SMOOTHING_FACTOR      0.2     // Facteur de lissage pour les lectures ADC (filtre passe-bas)
-#define POT_DEADZONE              20      // Zone morte pour éviter le bruit du potentiomètre
+#define ADC_SMOOTHING_FACTOR      0.1     // Facteur de lissage pour les lectures ADC (filtre passe-bas)
+#define POT_DEADZONE              10      // Zone morte pour éviter le bruit du potentiomètre
 
 // Nombre maximum de tentatives
 #define MAX_INIT_ATTEMPTS         3       // Nombre maximal de tentatives d'initialisation

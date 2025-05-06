@@ -18,6 +18,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "../../core/config.h"
+#include "display_manager.h" // Inclure display_manager au lieu de redéfinir la classe
 
 // États d'affichage
 enum DisplayState {
@@ -108,19 +109,6 @@ private:
     void checkDisplayStatus();
 };
 
-class DisplayManager {
-public:
-    DisplayManager();
-    bool isInitialized();
-    void setupI2C();
-    bool initLCD();
-    void displayMessage(const char* title, const char* message);
-    void displayWiFiInfo(const char* ssid, IPAddress ip);
-    void displayWelcomeScreen(bool simpleMode);
-    void createCustomChars();
-    void updateMainDisplay();
-    void displayOTAProgress(size_t current, size_t total);
-    void displayOTAStatus(bool success);
-};
+// La classe DisplayManager est maintenant définie dans display_manager.h
 
 #endif // UI_MANAGER_H

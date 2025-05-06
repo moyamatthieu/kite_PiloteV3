@@ -10,8 +10,12 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-#include "../include/logging.h"
+#include "utils/logging.h"
 #include <stdarg.h>
+
+// Ajout de la définition de LOG_BUFFER_SIZE qui est manquante
+#define LOG_BUFFER_SIZE 192
+
 #include "../include/config.h"
 
 // Variable globale pour le niveau de journalisation actuel

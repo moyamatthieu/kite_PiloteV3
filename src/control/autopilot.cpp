@@ -54,6 +54,8 @@ static void updateAutopilotState();
 
 // === IMPLÉMENTATION DES FONCTIONS PUBLIQUES ===
 
+// Initialise les paramètres de l'autopilote
+// Configure les valeurs par défaut et prépare le système pour le contrôle automatique
 bool autopilotInit() {
   if (isInitialized) {
     return true;
@@ -85,6 +87,8 @@ bool autopilotInit() {
   return true;
 }
 
+// Définit le mode de l'autopilote
+// Permet de passer entre les différents modes de vol (manuel, automatique, etc.)
 bool setAutopilotMode(AutopilotMode mode) {
   if (!isInitialized) {
     LOG_ERROR("APLT", "Tentative de changement de mode sans initialisation");

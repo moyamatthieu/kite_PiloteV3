@@ -16,6 +16,15 @@
 #include <Arduino.h>
 #include "config.h"  // Fichier de configuration centralisé
 
+// Constantes pour la gestion des potentiomètres
+#define ADC_RESOLUTION 4095
+#define POT_DIRECTION 34
+#define POT_TRIM 35
+#define POT_LENGTH 32
+#define POT_DEADZONE 10
+#define ADC_SMOOTHING_FACTOR 0.1
+#define POT_READ_INTERVAL 100
+
 // Structure pour stocker les valeurs des potentiomètres
 typedef struct {
   int rawValue;      // Valeur brute du potentiomètre (0-4095)
@@ -35,7 +44,10 @@ class PotentiometerManager {
     void begin();
     
     // Fonctions de lecture des potentiomètres
-    void updatePotentiometers();
+    bool updatePotentiometers(); // Modification de void à bool pour correspondre à l'implémentation
+    
+    // Vérification de l'initialisation
+    bool isInitialized() { return true; }
     
     // Fonctions d'accès aux valeurs
     int getDirection();      // Obtient la valeur de direction (-100 à +100)

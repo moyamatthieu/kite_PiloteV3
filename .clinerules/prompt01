@@ -2,7 +2,7 @@
 
 ## Bonnes pratiques générales
 
-- **Commentaires** : Toujours ajouter un commentaire descriptif pour chaque élément clé du code. Les commentaires doivent expliquer le "pourquoi" et non seulement le "quoi".
+- **Commentaires** : Toujours ajouter un commentaire descriptif pour chaque élément clé et chaque fonctions du code. Les commentaires doivent expliquer le "pourquoi" et non seulement le "quoi".
 
 - **Bibliothèques externes** : Ne jamais modifier le code des bibliothèques externes. Si une modification est nécessaire, documentez-la et utilisez un fork.
 
