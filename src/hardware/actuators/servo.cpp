@@ -37,18 +37,18 @@ bool servoInitAll() {
   lineModServo.setPeriodHertz(50);
   
   // Attacher les servomoteurs aux broches
-  if (!directionServo.attach(SERVO_DIRECTION_PIN, SERVO_MIN_PULSE, SERVO_MAX_PULSE)) {
+  if (!directionServo.attach(SERVO_DIRECTION_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH)) {
     LOG_ERROR("SERVO", "Échec d'initialisation du servo de direction");
     return false;
   }
   
-  if (!trimServo.attach(SERVO_TRIM_PIN, SERVO_MIN_PULSE, SERVO_MAX_PULSE)) {
+  if (!trimServo.attach(SERVO_TRIM_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH)) {
     LOG_ERROR("SERVO", "Échec d'initialisation du servo de trim");
     directionServo.detach();
     return false;
   }
   
-  if (!lineModServo.attach(SERVO_LINEMOD_PIN, SERVO_MIN_PULSE, SERVO_MAX_PULSE)) {
+  if (!lineModServo.attach(SERVO_LINEMOD_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH)) {
     LOG_ERROR("SERVO", "Échec d'initialisation du servo de modulation de ligne");
     directionServo.detach();
     trimServo.detach();

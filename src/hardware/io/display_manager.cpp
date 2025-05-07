@@ -335,3 +335,36 @@ void DisplayManager::drawProgressBar(uint8_t row, uint8_t percent) {
     lcd.print(" ");
   }
 }
+
+/**
+ * Affiche l'état en direct sur l'écran LCD
+ * @param direction Direction actuelle
+ * @param trim Valeur de trim
+ * @param lineLength Longueur de ligne en pourcentage
+ * @param wifi État du WiFi (true si connecté)
+ * @param uptime Temps de fonctionnement en secondes
+ */
+void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, bool wifi, unsigned long uptime) {
+  if (!lcdInitialized) return;
+  clear();
+  // Ligne 1 : WiFi et uptime
+  lcd.setCursor(0, 0);
+  lcd.print(wifi ? "WiFi:OK " : "WiFi:-- ");
+  lcd.print("Up:");
+  lcd.print(uptime);
+  lcd.print("s");
+  // Ligne 2 : Direction et Trim
+  lcd.setCursor(0, 1);
+  lcd.print("Dir:");
+  lcd.print(direction);
+  lcd.print("   Trim:");
+  lcd.print(trim);
+  // Ligne 3 : Longueur de ligne
+  lcd.setCursor(0, 2);
+  lcd.print("Longueur:");
+  lcd.print(lineLength);
+  lcd.print("%");
+  // Ligne 4 : Aide
+  lcd.setCursor(0, 3);
+  lcd.print("Pots=Ctrl  Btns=Menu");
+}

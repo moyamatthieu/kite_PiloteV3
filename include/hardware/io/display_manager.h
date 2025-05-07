@@ -41,6 +41,7 @@ public:
     void displaySystemStats();
     void displayOTAProgress(size_t current, size_t total);
     void displayOTAStatus(bool success);
+    void displayLiveStatus(int direction, int trim, int lineLength, bool wifi, unsigned long uptime);
     
 private:
     LiquidCrystal_I2C lcd;

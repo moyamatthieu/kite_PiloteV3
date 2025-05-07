@@ -1,168 +1,121 @@
 # Projet Autopilote de Kite Générateur d'Électricité
 
-**Version : 1.1.0 — Dernière mise à jour : 6 Mai 2025**
+*Version: 1.1.0 — Dernière mise à jour: 1 Mai 2025*
+
+## Guide de Navigation Rapide
+- **[Vue d'ensemble](#introduction)** - Concept et objectifs du projet
+- **[Matériel](#2-composants-matériels-clés)** - ESP32, capteurs et actionneurs
+- **[Logiciel](#3-fonctionnalités-logicielles-clés)** - Architecture et fonctionnalités
+- **[Sécurité](#4-système-de-sécurité-intégré)** - Protections et mesures d'urgence
+- **[Architecture](#10-architecture-des-fichiers-du-projet)** - Structure du code
+- **[Diagnostic](#11-systèmes-de-journalisation-diagnostic-et-terminal-distant)** - Outils de débogage
+
 
 ## Introduction
 
-Ce projet vise à développer un système d'autopilote optimisé pour un kite générateur d'électricité basé sur ESP32. Le système contrôle automatiquement un cerf-volant de traction pour produire de l'électricité de manière efficace et sécurisée. Il repose sur des algorithmes avancés, une architecture matérielle robuste et une interface utilisateur intuitive.
+Ce projet développe un système d'autopilote optimisé pour kite générateur d'électricité basé sur ESP32. Le système contrôle automatiquement un cerf-volant de traction pour produire de l'électricité de manière efficace et sécurisée, en utilisant des algorithmes sophistiqués et une architecture matérielle robuste.
+```mermaid
+graph TD
+  A[Direction du Vent] -->|^ ^ ^| B((Kite))
+  B -->|Ligne Gauche| C[Station au Sol]
+  B -->|Ligne Droite| C
 
-### Objectifs principaux
+  subgraph "Kite (avec IMU + ESP32)"
+    B
+  end
 
-- Maximiser la production d'énergie grâce à des trajectoires de vol optimisées.
-- Garantir un fonctionnement sécurisé avec détection et gestion des situations à risque.
-- Offrir une interface intuitive pour le contrôle et le monitoring.
-- Fonctionner de manière autonome dans diverses conditions météorologiques.
-- Optimiser l'efficacité énergétique globale du système.
+  subgraph "Station au Sol"
+    C --> D[Capteurs]
+    C --> E[Contrôle ESP32 Autopilot]
+    C --> F[Interface Web/LCD]
+    C --> G[Actionneurs]
+    C --> H[Système d'Alimentation]
 
----
+    D[Capteurs]
+    D -->|Tension| D1
+    D -->|Longueur| D2
+    D -->|Vent| D3
 
-## Guide de Navigation Rapide
+    G[Actionneurs]
+    G -->|Direction (Servo1)| G1
+    G -->|Trim (Servo2)| G2
+    G -->|Générateur (Servo3)| G3
 
-- **[Vue d'ensemble](#introduction)** : Concept et objectifs du projet.
-- **[Matériel](#2-composants-matériels-clés)** : ESP32, capteurs et actionneurs.
-- **[Logiciel](#3-fonctionnalités-logicielles-clés)** : Architecture et fonctionnalités.
-- **[Sécurité](#4-système-de-sécurité-intégré)** : Protections et mesures d'urgence.
-- **[Architecture](#10-architecture-des-fichiers-du-projet)** : Structure du code.
-- **[Diagnostic](#11-systèmes-de-journalisation-diagnostic-et-terminal-distant)** : Outils de débogage.
-
----
+    H[Système d'Alimentation]
+    H -->|Batterie| H1
+    H -->|Générateur| H2
+    H -->|Gestion| H3
+  end
+```
 
 ## 1. Objectif Global du Projet
 
-Le projet a pour but de développer un système de pilotage automatique basé sur ESP32 pour un kite (cerf-volant de traction) dans le but de générer de l'électricité de manière efficace et sécurisée. Le système doit :
+Développer un système de pilotage automatique basé sur ESP32 pour un kite (cerf-volant de traction) dans le but de générer de l'électricité de manière efficace et sécurisée. Le système doit:
 
-- Maximiser la production d'énergie via des trajectoires de vol optimisées.
-- Garantir un fonctionnement sécurisé avec détection et gestion des situations à risque.
-- Offrir une interface intuitive pour le contrôle et le monitoring.
-- Fonctionner de manière autonome dans diverses conditions météorologiques.
-- Optimiser l'efficacité énergétique globale du système.
+- Maximiser la production d'énergie via des trajectoires de vol optimisées
+- Garantir un fonctionnement sécurisé avec détection et gestion des situations à risque
+- Offrir une interface intuitive pour le contrôle et le monitoring
+- Fonctionner de manière autonome dans diverses conditions météorologiques
+- Optimiser l'efficacité énergétique globale du système
 
----
+## Gestion des Variables et Configuration dans le Projet
 
-## 2. Composants Matériels Clés
+### Variables Globales de Configuration
 
-### 2.1 Contrôleur Principal
+#### Quand centraliser dans un fichier `config.h` :
 
-- **ESP32 principal** :
-  - Modèle recommandé : ESP32-WROOM-32D.
-  - RAM : Minimum 4MB pour les buffers et l'interface web.
-  - Avantages :
-    - Puissance de calcul suffisante pour les algorithmes PID complexes.
-    - Connectivité Wi-Fi/BT intégrée.
-    - Consommation optimisée en mode deep sleep (<10µA).
+- **Paramètres communs et configurables** : Si vous avez des paramètres qui affectent plusieurs modules (par exemple, les pins utilisés, les constantes de calibrage, ou des flags de débogage), il est pratique de les centraliser dans un seul fichier. Cela facilite la modification et la maintenance, surtout si vous devez réajuster la configuration matérielle ou logicielle sans plonger dans chaque module.
+- **Cohérence** : Avoir un point d’accès unique aux paramètres réduit les risques de divergence ou d’incohérences entre les modules.
+- **Facilité de portabilité** : Un fichier de configuration centralisé permet de réutiliser facilement votre code dans un autre projet en adaptant uniquement ce fichier.
 
-### 2.2 Actionneurs
+#### Attention :
 
-#### 2.2.1 Servo 1 : Direction
+- **Risque de surcharge** : Si vous placez trop de variables dans `config.h`, cela peut vite devenir un monolithe difficile à gérer et à comprendre.
+- **Encapsulation** : Certaines variables n’ont d’intérêt que pour un module particulier. Les centraliser peut nuire à la clarté en exposant des détails qui devraient rester internes au module.
 
-- **Fonction** : Contrôle la direction gauche/droite du kite.
-- **Spécifications optimales** :
-  - Type : Servo digital haute vitesse (>0.10s/60°).
-  - Couple : 10-15kg/cm (selon taille du kite).
+### Variables Définies dans chaque Module
 
-#### 2.2.2 Servo 2 : Trim
+#### Quand définir localement dans chaque module (ex. `display_manager.h`, `button_ui.h`, `potentiometre_manager.h`) :
 
-- **Fonction** : Ajuste l'angle d'incidence pour la puissance.
-- **Spécifications optimales** :
-  - Type : Servo digital haute précision.
-  - Couple : 12-18kg/cm.
+- **Encapsulation et Modularité** : Pour maintenir un découplage fort entre les modules, il peut être préférable que chaque module gère ses propres variables internes. Cela permet de masquer les détails d’implémentation et de limiter l’impact de modifications internes.
+- **Code plus lisible et autonome** : Chaque module expose uniquement ce qui est nécessaire (via des interfaces publiques) sans révéler ses variables internes, ce qui rend le code plus maintenable et réutilisable.
+- **Réduction des dépendances globales** : Limiter l’accès aux variables globales aide à éviter des effets de bord indésirables lorsqu’un module modifie une valeur à laquelle d’autres dépendent.
 
-#### 2.2.3 Servo 3 : Générateur/Treuil
+#### Attention :
 
-- **Fonction double** :
-  - Génération d'énergie (résistance contrôlée).
-  - Enroulement/déroulement des lignes.
+- **Duplication éventuelle** : S’il y a des constantes ou des paramètres communs à plusieurs modules, définir ces variables localement peut entraîner une duplication. Dans ce cas, il vaut mieux les centraliser pour garder la cohérence.
 
-### 2.3 Capteurs
+### Conclusion Recommandée
 
-#### 2.3.1 IMU (Unité de Mesure Inertielle)
+Adoptez une approche mixte :
 
-- **Type recommandé** : BNO055 avec fusion de capteurs.
-- **Avantages** :
-  - Fusion de capteurs directement en hardware.
-  - Calibration automatique.
+- **Centralisez dans `config.h`** :
+  - Les paramètres globaux comme les pins, constantes de timing, seuils de détection, flags de débogage et autres éléments partagés entre plusieurs modules.
 
-#### 2.3.2 Communication IMU-ESP32
+- **Localisez dans chaque module** :
+  - Les variables internes ou les états propres à la logique et à la gestion d’un module (par exemple, l’état d’un afficheur ou d’un bouton), qui ne concernent pas l’ensemble du projet.
 
-- **Solution optimale** : ESP32 miniature sur le kite.
-  - Modèle : ESP32-S2 Mini ou ESP32-C3 Mini.
-  - Communication : ESP-NOW optimisé (faible latence, <5ms).
+Cette approche permet de tirer le meilleur parti des avantages de la centralisation (facilité de configuration et de modification globale) tout en conservant une bonne encapsulation et modularité. Ainsi, vous facilitez la maintenance et la compréhension du code par d’autres développeurs ou par vous-même plus tard.
 
-#### 2.3.3 Capteur de Tension de Ligne
+### Pour aller plus loin :
 
-- **Type optimal** : Cellule de charge amplifiée HX711.
-- **Optimisations** :
-  - Calibration automatique au démarrage.
-  - Filtrage numérique passe-bas optimisé.
+- **Utiliser des namespaces ou des classes** : Regroupez les variables et fonctions qui appartiennent à un même composant, surtout si vous travaillez avec du C++ sur Arduino.
+- **Documenter clairement votre `config.h`** : Assurez-vous que les utilisateurs (ou vous-même) sachent précisément l’impact de chaque paramètre.
+- **Automatiser une vérification lors des compilations** : Décelez les conflits ou les incohérences potentielles entre modules.
 
----
+### Transition vers des Configurations Dynamiques
 
-## 3. Fonctionnalités Logicielles Clés
+En résumé, à mesure que vos projets Arduino se complexifient, il devient judicieux d'adopter des outils de configuration plus dynamiques pour :
 
-### 3.1 Autopilote
+- **Accélérer le prototypage et le débogage** : Ajustez rapidement des paramètres sans avoir à recompiler le code.
+- **Améliorer l'ergonomie du système** : Permettez une adaptation en temps réel aux conditions d'utilisation.
+- **Faciliter la maintenance et la scalabilité** : Centralisez et déportez une partie du contrôle de la configuration hors du code compilé.
 
-- **Description** :
-  - Contrôle automatique des trajectoires de vol.
-  - Algorithmes PID pour ajuster la direction et la puissance.
+Cette transition illustre l'évolution naturelle d'un projet, passant d'une configuration statique à une configuration adaptative, capable de répondre aux besoins changeants de l'application. Cela offre une meilleure expérience, tant pour les développeurs que pour les utilisateurs finaux.
 
-### 3.2 Gestion de la Génération d'Énergie
+### Explorations Futures
 
-- **Description** :
-  - Optimisation de la production d'énergie en temps réel.
-  - Surveillance des conditions de vent et ajustement dynamique.
+- **Bibliothèques dédiées** : Utilisez des bibliothèques spécialisées pour gérer des configurations dynamiques sur Arduino.
+- **Interfaces web** : Implémentez des interfaces web pour des projets IoT, permettant une gestion intuitive et à distance des paramètres.
 
-### 3.3 Interface Web
-
-- **Description** :
-  - Serveur web intégré pour le contrôle et le monitoring.
-  - Visualisation des données en temps réel.
-
----
-
-## 4. Système de Sécurité Intégré
-
-### 4.1 Détection des Risques
-
-- **Description** :
-  - Surveillance continue des conditions de vol.
-  - Détection des anomalies et déclenchement des procédures d'urgence.
-
-### 4.2 Hiérarchie des Réponses
-
-- **Description** :
-  - Réponses graduées en fonction de la gravité des situations.
-  - Activation automatique des modes de sécurité.
-
----
-
-## 10. Architecture des Fichiers du Projet
-
-- **Structure Globale** :
-  - `src/` : Contient le code source principal.
-  - `include/` : Contient les fichiers d'en-tête.
-  - `docs-fr/` : Documentation en français.
-
----
-
-## 11. Systèmes de Journalisation, Diagnostic et Terminal Distant
-
-### 11.1 Système de Journalisation
-
-- **Description** :
-  - Enregistrement des événements critiques pour le débogage.
-
-### 11.2 Système de Diagnostic
-
-- **Description** :
-  - Vérification de l'état des capteurs et des actionneurs.
-
-### 11.3 Terminal Distant
-
-- **Description** :
-  - Interface pour envoyer des commandes et recevoir des données en temps réel.
-
----
-
-## Conclusion
-
-Ce projet représente une avancée significative dans le domaine des systèmes autonomes pour la production d'énergie renouvelable. Grâce à une architecture robuste et des fonctionnalités avancées, il offre une solution complète pour maximiser l'efficacité et la sécurité des kites générateurs d'électricité.
+Quelles autres fonctionnalités aimeriez-vous voir évoluer dans une telle gestion de configuration ?

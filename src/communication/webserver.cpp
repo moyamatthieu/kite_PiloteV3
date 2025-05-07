@@ -5,13 +5,24 @@
 #include "fallback_html.h"
 #include "../include/config.h"
 #include "core/config.h"
+// Logging
+#include "core/logging.h"
 
-// Mise en cache des valeurs pour éviter les régénérations fréquentes
+// Forward declarations des handlers en IRAM
+static void IRAM_ATTR handleRoot(AsyncWebServerRequest *request);
+static void IRAM_ATTR handleApiInfo(AsyncWebServerRequest *request);
+static void IRAM_ATTR handleApiRestart(AsyncWebServerRequest *request);
+static void IRAM_ATTR handleDashboard(AsyncWebServerRequest *request);
+static void IRAM_ATTR handleFavicon(AsyncWebServerRequest *request);
+static void IRAM_ATTR handleNotFound(AsyncWebServerRequest *request);
+
+// Buffers statiques et flags pour mise en cache
 static char jsonBuffer[256]; // Buffer statique pour JSON
-static String lastHtmlContent; // Mise en cache du contenu HTML
+static char htmlBuffer[1024]; // Buffer statique pour HTML
+static bool htmlCacheValid = false;
 static unsigned long lastHtmlGenTime = 0;
 static IPAddress lastCachedIP;
-static String lastStatus;
+static char lastStatus[64] = "";
 
 // Fonction pour obtenir le port du serveur - optimisée
 uint16_t getServerPort(AsyncWebServer* server) {
@@ -21,106 +32,81 @@ uint16_t getServerPort(AsyncWebServer* server) {
 // Fonction pour définir le mode de fonctionnement
 void setWebServerMode(bool useFiles) {
     // Toujours mode HTML généré
-    Serial.println("Mode génération de code HTML optimisé activé");
+    LOG_INFO("WEBS", "Mode HTML optimisé activé");
 }
 
-// Fonction interne pour générer le HTML ou utiliser la version mise en cache
-String getHtmlContent() {
+// Fonction interne pour générer ou retourner le HTML en cache
+static IRAM_ATTR const char* getHtmlContent() {
     unsigned long now = millis();
     bool ipChanged = WiFi.localIP() != lastCachedIP;
-    bool statusMayHaveChanged = (now - lastHtmlGenTime) > 5000; // Vérifier toutes les 5 secondes
-    
-    // Ne régénérer que si nécessaire (IP changée ou contenu initial vide)
-    if (lastHtmlContent.length() == 0 || ipChanged || statusMayHaveChanged) {
-        // Générer le contenu HTML avec substitutions
-        String htmlContent = String(fallbackHtml);
-        String status = getSystemStatusString();
-        String ip = WiFi.localIP().toString();
-        
-        htmlContent.replace("{status}", status);
-        htmlContent.replace("{ip}", ip);
-        
-        // Mettre à jour les variables de cache
-        lastHtmlContent = htmlContent;
+    const char* status = getSystemStatusString().c_str();
+    bool statusChanged = strcmp(status, lastStatus) != 0;
+    if (!htmlCacheValid || ipChanged || statusChanged || now - lastHtmlGenTime > 5000) {
+        // Régénération du HTML dans htmlBuffer
+        snprintf(htmlBuffer, sizeof(htmlBuffer), fallbackHtml,
+                 status, WiFi.localIP().toString().c_str());
+        // Mettre à jour le cache
+        htmlCacheValid = true;
         lastHtmlGenTime = now;
         lastCachedIP = WiFi.localIP();
-        lastStatus = status;
-        
-        return htmlContent;
+        strncpy(lastStatus, status, sizeof(lastStatus)-1);
+        lastStatus[sizeof(lastStatus)-1] = '\0';
     }
-    
-    // Retourner la version mise en cache
-    return lastHtmlContent;
+    return htmlBuffer;
+}
+
+// Handlers externes
+static void IRAM_ATTR handleRoot(AsyncWebServerRequest *request) {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", getHtmlContent());
+    response->addHeader("Cache-Control", "max-age=30");
+    request->send(response);
+}
+
+static void IRAM_ATTR handleApiInfo(AsyncWebServerRequest *request) {
+    IPAddress currentIP = WiFi.localIP();
+    const char* status = getSystemStatusString().c_str();
+    snprintf(jsonBuffer, sizeof(jsonBuffer),
+             "{\"ip\":\"%s\",\"status\":\"%s\",\"uptime\":%lu}",
+             currentIP.toString().c_str(), status, millis() / 1000);
+    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", jsonBuffer);
+    response->addHeader("Cache-Control", "max-age=5");
+    request->send(response);
+}
+
+static void IRAM_ATTR handleApiRestart(AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Redémarrage en cours...");
+    delay(500);
+    ESP.restart();
+}
+
+static void IRAM_ATTR handleDashboard(AsyncWebServerRequest *request) {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/html",
+        "<html><head><title>Dashboard</title><meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<style>body{font-family:Arial;margin:0;padding:20px;}</style></head>"
+        "<body><h1>Tableau de bord</h1><p>Version optimisée</p></body></html>");
+    response->addHeader("Cache-Control", "max-age=3600");
+    request->send(response);
+}
+
+static void IRAM_ATTR handleFavicon(AsyncWebServerRequest *request) {
+    AsyncWebServerResponse *response = request->beginResponse(204);
+    response->addHeader("Cache-Control", "max-age=86400");
+    request->send(response);
+}
+
+static void IRAM_ATTR handleNotFound(AsyncWebServerRequest *request) {
+    AsyncWebServerResponse *response = request->beginResponse(404, "text/html",
+        "<html><body><h1>Page non trouvée</h1><p>Ressource non disponible</p></body></html>");
+    request->send(response);
 }
 
 // Gestion des routes - version optimisée
 void setupServerRoutes(AsyncWebServer* server) {
-    // Route principale avec mise en cache
-    server->on("/", [](AsyncWebServerRequest *request){
-        // Utiliser la fonction optimisée pour obtenir le HTML
-        AsyncWebServerResponse *response = request->beginResponse(200, "text/html", getHtmlContent());
-        
-        // Ajouter des en-têtes de cache pour réduire les requêtes
-        response->addHeader("Cache-Control", "max-age=30");  // Cache côté client pendant 30 secondes
-        request->send(response);
-    });
-    
-    // API pour obtenir les informations du système - optimisée avec mise en cache
-    server->on("/api/info", [](AsyncWebServerRequest *request){
-        // Vérifier si l'IP ou le statut ont changé avant de régénérer
-        IPAddress currentIP = WiFi.localIP();
-        String currentStatus = getSystemStatusString();
-        
-        if (currentIP != lastCachedIP || currentStatus != lastStatus) {
-            // Mettre à jour le cache seulement si nécessaire
-            snprintf(jsonBuffer, sizeof(jsonBuffer), 
-                     "{\"ip\":\"%s\", \"status\":\"%s\", \"uptime\":\"%lu\"}", 
-                     currentIP.toString().c_str(), 
-                     currentStatus.c_str(),
-                     millis() / 1000);
-            
-            lastCachedIP = currentIP;
-            lastStatus = currentStatus;
-        }
-        
-        AsyncWebServerResponse *response = request->beginResponse(200, "application/json", jsonBuffer);
-        response->addHeader("Cache-Control", "max-age=5");  // Cache court pour les données dynamiques
-        request->send(response);
-    });
-
-    // API pour redémarrer le système avec gestion des erreurs
-    server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(200, "text/plain", "Redémarrage en cours...");
-        // Utiliser un délai avant le redémarrage pour permettre l'envoi de la réponse
-        delay(500);
-        ESP.restart();
-    });
-
-    // Accès à la dashboard HTML avec mise en cache statique
-    server->on("/dashboard", [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(200, "text/html", 
-            "<html><head><title>Dashboard</title><meta name='viewport' content='width=device-width, initial-scale=1'>"
-            "<style>body{font-family:Arial;margin:0;padding:20px;}</style></head>"
-            "<body><h1>Tableau de bord</h1><p>Version optimisée</p></body></html>");
-        
-        // Mise en cache longue durée pour le contenu statique
-        response->addHeader("Cache-Control", "max-age=3600");  // Cache pendant 1 heure
-        request->send(response);
-    });
-    
-    // Gérer les requêtes de favicon pour éviter les requêtes inutiles
-    server->on("/favicon.ico", [](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(204); // No Content
-        response->addHeader("Cache-Control", "max-age=86400"); // Cache pendant 24 heures
-        request->send(response);
-    });
-    
-    // Intercepter les requêtes 404 pour économiser des ressources
-    server->onNotFound([](AsyncWebServerRequest *request){
-        AsyncWebServerResponse *response = request->beginResponse(404, "text/html", 
-            "<html><body><h1>Page non trouvée</h1><p>Ressource non disponible</p></body></html>");
-        request->send(response);
-    });
-    
-    Serial.println("Routes HTTP configurées en mode optimisé");
+    server->on("/", HTTP_GET, handleRoot);
+    server->on("/api/info", HTTP_GET, handleApiInfo);
+    server->on("/api/restart", HTTP_POST, handleApiRestart);
+    server->on("/dashboard", HTTP_GET, handleDashboard);
+    server->on("/favicon.ico", HTTP_GET, handleFavicon);
+    server->onNotFound(handleNotFound);
+    LOG_INFO("WEBS", "Routes HTTP configurées (mode optimisé)");
 }

@@ -141,6 +141,18 @@ bool PotentiometerManager::updatePotentiometers() {
     direction.rawValue = readPotentiometer(POT_DIRECTION);
     trim.rawValue = readPotentiometer(POT_TRIM);
     lineLength.rawValue = readPotentiometer(POT_LENGTH);
+    // Mappage des valeurs brutes en valeurs utilisables (-100..100 et 0..100)
+    direction.mappedValue = map(direction.rawValue, directionMin, directionMax, -100, 100);
+    trim.mappedValue = map(trim.rawValue, trimMin, trimMax, -100, 100);
+    lineLength.mappedValue = map(lineLength.rawValue, lineLengthMin, lineLengthMax, 0, 100);
+    // Détection des changements
+    direction.hasChanged = (direction.rawValue != direction.lastRawValue);
+    trim.hasChanged = (trim.rawValue != trim.lastRawValue);
+    lineLength.hasChanged = (lineLength.rawValue != lineLength.lastRawValue);
+    // Sauvegarde des dernières valeurs brutes
+    direction.lastRawValue = direction.rawValue;
+    trim.lastRawValue = trim.rawValue;
+    lineLength.lastRawValue = lineLength.rawValue;
     
     return true; // Mise à jour effectuée
 }

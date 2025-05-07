@@ -90,6 +90,17 @@ bool wifiConnected = false;                  // État de la connexion WiFi
 uint8_t systemState = 0;                     // État général du système
 unsigned long ota_progress_millis = 0;       // Timestamp pour la progression OTA
 unsigned long lastSystemCheck = 0;           // Dernière vérification système
+// Intervalles de log pour limiter la verbosité
+static unsigned long lastSystemStateLogTime = 0;
+static unsigned long lastMemoryLogTime = 0;
+static const unsigned long SYSTEM_STATE_LOG_INTERVAL_MS = 1000; // 1s
+static const unsigned long MEMORY_LOG_INTERVAL_MS = 2000;       // 2s
+
+// Ajout pour affichage dynamique
+static unsigned long lastDisplayUpdate = 0;
+static int lastDir = 0, lastTrim = 0, lastLen = 0;
+static bool lastWifi = false;
+static unsigned long lastUptime = 0;
 
 // === DÉCLARATION DES FONCTIONS ===
 
@@ -192,6 +203,8 @@ void setupServer() {
   // Démarrer le serveur web asynchrone
   server.begin();
   LOG_INFO("SERVER", "Serveur HTTP démarré sur le port %d", SERVER_PORT);
+  // Afficher l'adresse IP pour accéder à l'interface web
+  LOG_INFO("SERVER", "IP: %s", WiFi.localIP().toString().c_str());
   
   // Affichage final
   display.displayMessage("Système", "Prêt!");
@@ -210,10 +223,12 @@ void setupServer() {
 void setupHardware() {
   // Configurer les GPIO
   pinMode(LED_PIN, OUTPUT);
-  pinMode(BUTTON_BLUE_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_GREEN_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_RED_PIN, INPUT_PULLUP);
-  
+  // Broches des boutons (config centralisée)
+  pinMode(BUTTON_BACK_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+
   // LED clignote une fois pour indiquer l'initialisation réussie
   digitalWrite(LED_PIN, HIGH);
   delay(50);
@@ -230,6 +245,8 @@ void setupHardware() {
     
     // Créer les caractères personnalisés
     display.createCustomChars();
+    // Initialiser le gestionnaire d'interface (LCD et boutons)
+    uiManager.begin();
   } else {
     LOG_ERROR("INIT", "Échec d'initialisation de l'écran LCD");
   }
@@ -389,8 +406,10 @@ void setup() {
     LOG_WARNING("INIT", "Système prêt avec avertissements");
   }
   
-  // Afficher l'écran principal
+  // Afficher l'écran principal et ne pas changer d'affichage automatiquement
   display.updateMainDisplay();
+  // Empêcher tout changement d'affichage automatique après l'init
+  // (Laisser l'utilisateur changer via les boutons uniquement)
 }
 
 /**
@@ -398,18 +417,41 @@ void setup() {
  * Gère les mises à jour OTA et surveille l'état du système
  */
 void loop() {
-  // Nourrir les watchdogs pour éviter un reset
+  unsigned long now = millis();
+  // Vérification système périodique
+  if (now - lastSystemStateLogTime >= SYSTEM_STATE_LOG_INTERVAL_MS) {
+    checkSystemState();
+    lastSystemStateLogTime = now;
+  }
+  // Journalisation mémoire périodique
+  if (now - lastMemoryLogTime >= MEMORY_LOG_INTERVAL_MS) {
+    logMemoryUsage("MAIN");
+    lastMemoryLogTime = now;
+  }
+  // Nourrir les watchdogs
   feedWatchdogs();
-  
   // Gestion des mises à jour OTA
   ElegantOTA.loop();
-  
-  // Vérifie l'état du système
-  checkSystemState();
-    
-  // Journaliser l'utilisation de la mémoire
-  logMemoryUsage("MAIN");
-  
-  // Court délai pour éviter de monopoliser le CPU
+  // Lecture des potentiomètres et pilotage des servomoteurs
+  if (potManager.updatePotentiometers()) {
+    // Lien direct : potentiomètre -> servo (sans mapping)
+    servoSetDirection(potManager.getDirection());
+    servoSetTrim(potManager.getTrim());
+    servoSetLineModulation(potManager.getLineLength());
+  }
+  // Affichage dynamique toutes les 200ms ou si changement
+  if (now - lastDisplayUpdate > 200) {
+    int dir = potManager.getDirection();
+    int trim = potManager.getTrim();
+    int len = potManager.getLineLength();
+    bool wifi = (WiFi.status() == WL_CONNECTED);
+    unsigned long uptime = now / 1000;
+    if (dir != lastDir || trim != lastTrim || len != lastLen || wifi != lastWifi || uptime != lastUptime) {
+      display.displayLiveStatus(dir, trim, len, wifi, uptime);
+      lastDir = dir; lastTrim = trim; lastLen = len; lastWifi = wifi; lastUptime = uptime;
+      lastDisplayUpdate = now;
+    }
+  }
+  // Court délai
   delay(10);
 }

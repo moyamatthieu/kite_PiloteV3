@@ -97,8 +97,8 @@
     { "type": "wokwi-gnd", "id": "gnd1", "top": 28.8, "left": -471, "attrs": {} }
   ],
   "connections": [
-    [ "$serialMonitor:RX", "esp:TX0", "gray", [ "v-19.2", "h48", "v19.2" ] ],
-    [ "$serialMonitor:TX", "esp:RX0", "gray", [ "v-38.4", "h67.2", "v38.4" ] ],
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
     [ "esp:33", "$serialMonitor:DTR", "orange", [ "h-48", "v-96", "h-192" ] ],
     [ "esp:27", "$serialMonitor:RTS", "orange", [ "h-57.6", "v-115.2", "h-192" ] ],
     [ "esp:GND.3", "$serialMonitor:GND", "black", [ "h-67.2", "v-134.4", "h-192" ] ],

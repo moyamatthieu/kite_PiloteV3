@@ -30,7 +30,4 @@ void setupServerRoutes(AsyncWebServer* server);
 // Utilise une mise en cache interne pour éviter les régénérations fréquentes
 String getSystemStatusString();
 
-// Fonction interne pour générer le contenu HTML ou utiliser le cache
-String getHtmlContent();
-
 #endif // KITE_WEBSERVER_H

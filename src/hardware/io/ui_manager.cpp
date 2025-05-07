@@ -81,10 +81,10 @@ bool UIManager::begin() {
         createCustomChars();
         
         // Configuration des boutons
-        pinMode(BUTTON_BLUE_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_GREEN_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_RED_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_YELLOW_PIN, INPUT_PULLUP);
+        pinMode(BUTTON_BACK_PIN, INPUT_PULLUP);
+        pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+        pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+        pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
         
         LOG_INFO("UI", "Interface initialisée avec succès!");
         return true;
@@ -162,7 +162,7 @@ void UIManager::checkButtons() {
     lastButtonCheck = currentTime;
     
     // Lecture des boutons avec anti-rebond
-    uint8_t pins[4] = {BUTTON_BLUE_PIN, BUTTON_GREEN_PIN, BUTTON_RED_PIN, BUTTON_YELLOW_PIN};
+    uint8_t pins[4] = {BUTTON_BACK_PIN, BUTTON_UP_PIN, BUTTON_SELECT_PIN, BUTTON_DOWN_PIN};
     
     for (int i = 0; i < 4; i++) {
         bool reading = !digitalRead(pins[i]); // Inversé car INPUT_PULLUP

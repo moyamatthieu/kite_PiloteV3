@@ -14,6 +14,10 @@
 #include "../../include/utils/logging.h"
 #include <esp_system.h>
 #include <Arduino.h>
+#include <esp_task_wdt.h>   // Ajout: inclusion pour les fonctions watchdog
+
+// Forward declaration pour la tâche de redémarrage
+static void restartTask(void* parameters);
 
 // Variables système globales
 static SystemInfo systemInfo;
