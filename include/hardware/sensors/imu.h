@@ -1,13 +1,10 @@
 /*
   -----------------------
-  Kite PiloteV3 - Module IMU (Interface)
+  Module IMU (Inertial Measurement Unit)
   -----------------------
   
-  Interface pour la gestion de l'unité de mesure inertielle (IMU) du kite.
-  
-  Version: 1.0.0
-  Date: 2 mai 2025
-  Auteurs: Équipe Kite PiloteV3
+  Gestion du capteur inertiel pour mesurer l'orientation et les mouvements du kite.
+  Utilise un MPU6050 pour les mesures d'accélération et de rotation.
 */
 
 #ifndef IMU_H
@@ -17,23 +14,44 @@
 #include <Wire.h> // Include for TwoWire and Wire object
 #include "../../core/config.h"
 
+// === CONSTANTES IMU ===
+#define IMU_I2C_ADDR 0x68        // Adresse I2C par défaut du MPU6050
+#define GYRO_SCALE 131.0         // Échelle du gyroscope (LSB/deg/s)
+#define ACCEL_SCALE 16384.0      // Échelle de l'accéléromètre (LSB/g)
+#define CALIBRATION_SAMPLES 1000  // Nombre d'échantillons pour la calibration
+
 // === DÉFINITION DES TYPES ===
 
-// Structure pour les données d'orientation
+// Structure pour les données brutes de l'IMU
 typedef struct {
-  float roll;                   // Angle de roulis (degrés, -180 à 180)
-  float pitch;                  // Angle de tangage (degrés, -90 à 90)
-  float yaw;                    // Angle de lacet (degrés, 0 à 360)
-  float rollRate;               // Vitesse de roulis (degrés/s)
-  float pitchRate;              // Vitesse de tangage (degrés/s)
-  float yawRate;                // Vitesse de lacet (degrés/s)
-  int16_t accelX;               // Accélération X (brute)
-  int16_t accelY;               // Accélération Y (brute)
-  int16_t accelZ;               // Accélération Z (brute)
-  uint32_t timestamp;           // Horodatage (ms)
-  bool isCalibrated;            // État de calibration
-  uint8_t accuracy;             // Précision (0-3)
+    int16_t ax;                  // Accélération brute sur X
+    int16_t ay;                  // Accélération brute sur Y
+    int16_t az;                  // Accélération brute sur Z
+    int16_t gx;                  // Vitesse angulaire brute autour de X
+    int16_t gy;                  // Vitesse angulaire brute autour de Y
+    int16_t gz;                  // Vitesse angulaire brute autour de Z
+    float temperature;           // Température du capteur en °C
+} RawIMUData;
+
+// Structure pour les données calibrées de l'IMU
+typedef struct {
+    float accel[3];             // Accélérations calibrées [x, y, z] en g
+    float gyro[3];              // Vitesses angulaires calibrées [x, y, z] en deg/s
+    float orientation[3];        // Orientation [pitch, roll, yaw] en degrés
+    float quaternion[4];        // Quaternion d'orientation [w, x, y, z]
+    uint32_t timestamp;         // Horodatage de la mesure
+    bool dataValid;             // Indicateur de validité des données
 } IMUData;
+
+// Structure pour la configuration de l'IMU
+typedef struct {
+    uint8_t gyroRange;          // Plage du gyroscope (±250/500/1000/2000 deg/s)
+    uint8_t accelRange;         // Plage de l'accéléromètre (±2/4/8/16 g)
+    uint8_t dlpfBandwidth;      // Bande passante du filtre passe-bas
+    uint8_t sampleRate;         // Taux d'échantillonnage en Hz
+    bool fifoEnabled;           // Activation du FIFO
+    bool lowPowerMode;          // Mode basse consommation
+} IMUConfig;
 
 // États de calibration IMU
 typedef enum {
@@ -43,71 +61,58 @@ typedef enum {
   IMU_CALIBRATION_ERROR = 3     // Erreur de calibration
 } IMUCalibrationState;
 
-// === DÉCLARATION DES FONCTIONS ===
+// === PROTOTYPES DES FONCTIONS ===
 
 /**
  * Initialise l'IMU
- * @param wirePort Port I2C à utiliser (Wire ou Wire1)
+ * @param config Configuration optionnelle de l'IMU
  * @return true si succès, false si échec
  */
-bool imuInit(TwoWire &wirePort = Wire);
-
-/**
- * Lit les données de l'IMU
- * @return Structure contenant les données d'orientation à jour
- */
-IMUData imuReadData();
+bool imuInit(const IMUConfig* config = nullptr);
 
 /**
  * Calibre l'IMU
- * @param autoMode Mode automatique si true, sinon guidage pas à pas
- * @return État de calibration après l'opération
- */
-IMUCalibrationState imuCalibrate(bool autoMode = true);
-
-/**
- * Obtient l'état de calibration actuel de l'IMU
- * @return État de calibration
- */
-IMUCalibrationState imuGetCalibrationState();
-
-/**
- * Remet à zéro l'orientation de référence
- * @param setYawToZero Remet le lacet à zéro si true
  * @return true si succès, false si échec
  */
-bool imuResetReference(bool setYawToZero = true);
+bool imuCalibrate();
 
 /**
- * Vérifie si l'IMU est fonctionnelle
- * @return true si fonctionnelle, false sinon
- */
-bool imuIsHealthy();
-
-/**
- * Fonction de filtrage pour améliorer la précision des données
- * @param rawData Données brutes de l'IMU
- * @return Données filtrées
- */
-IMUData imuFilterData(const IMUData &rawData);
-
-/**
- * Met en veille l'IMU pour économiser de l'énergie
+ * Lit les données brutes de l'IMU
+ * @param data Structure pour stocker les données brutes
  * @return true si succès, false si échec
  */
-bool imuSleep();
+bool imuReadRawData(RawIMUData* data);
 
 /**
- * Sort l'IMU du mode veille
+ * Lit les données traitées de l'IMU
+ * @param data Structure pour stocker les données traitées
  * @return true si succès, false si échec
  */
-bool imuWake();
+bool imuReadProcessedData(IMUData* data);
 
 /**
- * Mise à jour périodique des données de l'IMU
- * Fonction thread-safe compatible avec FreeRTOS
+ * Configure l'IMU
+ * @param config Configuration à appliquer
  * @return true si succès, false si échec
  */
-bool updateIMU();
+bool imuConfigure(const IMUConfig* config);
+
+/**
+ * Effectue un auto-test de l'IMU
+ * @return true si succès, false si échec
+ */
+bool imuSelfTest();
+
+/**
+ * Obtient le dernier message d'erreur de l'IMU
+ * @return Chaîne de caractères contenant l'erreur
+ */
+const char* imuGetLastError();
+
+/**
+ * Met en veille ou réveille l'IMU
+ * @param enable true pour mettre en veille, false pour réveiller
+ */
+void imuSleep(bool enable);
 
 #endif // IMU_H

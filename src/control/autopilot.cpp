@@ -382,7 +382,7 @@ static void updateConfidence(const IMUData& imuData) {
   // Pour l'instant, c'est une version simplifiée
   
   // Facteur 1: Stabilité des données IMU
-  float gyroMagnitude = std::sqrt(std::pow(imuData.rollRate, 2) + std::pow(imuData.pitchRate, 2) + std::pow(imuData.yawRate, 2));
+  float gyroMagnitude = std::sqrt(std::pow(imuData.gyro[0], 2) + std::pow(imuData.gyro[1], 2) + std::pow(imuData.gyro[2], 2));
   
   // Réduire la confiance si les gyroscopes montrent trop de mouvement
   if (gyroMagnitude > 200) {

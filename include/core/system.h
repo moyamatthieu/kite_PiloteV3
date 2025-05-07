@@ -10,6 +10,11 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
+/* === MODULE SYSTÈME ===
+   Ce module gère les fonctions système de base, y compris l'initialisation,
+   la gestion des erreurs, et les états globaux du système.
+*/
+
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
@@ -78,7 +83,7 @@ void systemRestart(unsigned long delayMs = 0);
 bool systemHealthCheck();
 
 // Vérifier l'état du matériel
-bool systemCheckHardware();  // Fonction ajoutée pour vérifier l'état du matériel
+bool systemCheckHardware();
 
 // Entrer en mode économie d'énergie
 void enterPowerSaveMode();
@@ -97,9 +102,6 @@ void clearSystemErrors();
 
 // Gérer une erreur système
 void handleSystemError(const char* errorSource, const char* errorMessage);
-
-// Vérifier si le système est en bonne santé
-bool isSystemHealthy();
 
 // Alimenter les watchdogs
 void feedWatchdogs();

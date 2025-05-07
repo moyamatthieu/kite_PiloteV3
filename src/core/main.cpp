@@ -27,19 +27,19 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
-// === INCLUSIONS DES BIBLIOTHÈQUES ===
+// === INCLUSIONS DES BIBLIOTHÈQUES EXTERNES ===
 #include <WiFi.h>                // Gestion de la connexion WiFi
-#include <AsyncTCP.h>            // Gestion des communications TCP asynchrones
-#include <ESPAsyncWebServer.h>   // Serveur web asynchrone
-#include <ElegantOTA.h>          // Mise à jour OTA (Over The Air)
+#include <AsyncTCP.h>            // Communication TCP asynchrone non bloquante
+#include <ESPAsyncWebServer.h>   // Serveur HTTP asynchrone pour interface web
+#include <ElegantOTA.h>          // Module de mise à jour OTA (Over The Air)
 #include <ESP32Servo.h>          // Bibliothèque pour les servomoteurs
 #include <FastAccelStepper.h>    // Bibliothèque pour le moteur pas à pas
 
-// === INCLUSIONS MODULES CORE ===
-#include "core/config.h"         // Configuration centralisée
-#include "core/system.h"         // Système de base
-#include "core/logging.h"        // Système de journalisation
-#include "core/task_manager.h"   // Gestionnaire de tâches
+// === INCLUSIONS DES MODULES CENTRAUX DU PROJET ===
+#include "core/config.h"         // Constantes de configuration globale (pins, timings)
+#include "core/system.h"         // Gestion de l'état système et watchdog
+#include "core/logging.h"        // Fonctions et macros de journalisation
+#include "core/task_manager.h"   // Orchestration des tâches FreeRTOS
 
 // === INCLUSIONS MODULES HARDWARE ===
 // Capteurs
@@ -74,9 +74,7 @@
 #include "utils/diagnostics.h"            // Diagnostics système
 #include "utils/terminal.h"               // Terminal distant
 
-// === DÉFINITION DES VARIABLES GLOBALES ===
-
-// Objets principaux
+// === DÉCLARATION DES OBJETS GLOBAUX ===
 DisplayManager display;                       // Gestionnaire d'affichage LCD
 ButtonUIManager buttonUI(&display);           // Gestionnaire de l'interface utilisateur à boutons
 PotentiometerManager potManager;              // Gestionnaire des potentiomètres
@@ -367,60 +365,59 @@ void checkSystemState() {
 }
 
 /**
- * Fonction principale du programme
+ * FONCTION PRINCIPALE D'INITIALISATION
  * Initialise le système et démarre les tâches principales
  */
 void setup() {
-  // Initialiser le système de journalisation
+  // Initialisation du port série et du système de logs
   #if defined(LOG_LEVEL)
     logInit((LogLevel)LOG_LEVEL, 115200);
   #else
-    logInit(LOG_INFO, 115200);  // Par défaut si non défini
+    logInit(LOG_INFO, 115200);  // Niveau INFO par défaut si non spécifié
   #endif
-  
-  // Message de démarrage
-  LOG_INFO("INIT", "Démarrage Kite PiloteV3 v%s", SYSTEM_VERSION);
-  
-  // Initialiser le système principal
-  SystemErrorCode sysInitResult = systemInit();
-  if (sysInitResult != SYS_OK) {
-    LOG_ERROR("INIT", "Erreur d'initialisation système: %s", systemErrorToString(sysInitResult));
+
+  LOG_INFO("INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
+
+  // Initialisation du système et du watchdog
+  SystemErrorCode result = systemInit();
+  if (result != SYS_OK) {
+    LOG_ERROR("SYS", "Échec init système : %s", systemErrorToString(result));
   }
-  
-  // Initialiser les composants matériels
+
+  // Configuration du matériel : GPIO, écran, capteurs, actionneurs
   setupHardware();
-  
-  // Configurer la connexion WiFi
+
+  // Connexion au réseau WiFi configuré dans config.h
   setupWiFi();
-  
-  // Configurer le serveur web
+
+  // Démarrage du serveur web et configuration OTA
   setupServer();
-  
-  // Configurer et démarrer les tâches FreeRTOS
+
+  // Lancement des tâches FreeRTOS (UI, capteurs, contrôle, etc.)
   setupTasks();
-  
-  // Vérifier l'état du système
+
+  // Vérification de l'état global après initialisation
   if (isSystemHealthy()) {
     LOG_INFO("INIT", "Système prêt et en bon état");
   } else {
     LOG_WARNING("INIT", "Système prêt avec avertissements");
   }
-  
-  // Afficher l'écran principal et ne pas changer d'affichage automatiquement
+
+  // Affichage initial sur l'écran LCD : statut système et réseau
   display.updateMainDisplay();
-  // Empêcher tout changement d'affichage automatique après l'init
-  // (Laisser l'utilisateur changer via les boutons uniquement)
 }
 
 /**
- * Boucle principale exécutée en continu
+ * BOUCLE PRINCIPALE
  * Gère les mises à jour OTA et la coordination des différentes fonctionnalités
  */
 void loop() {
-  // Boucle principale allégée : tout le métier est géré par FreeRTOS
-  // On ne garde que l'alimentation du watchdog et la gestion OTA
+  // Nourrit les watchdogs pour éviter les resets intempestifs
   feedWatchdogs();
+
+  // Exécution de la boucle de mise à jour OTA (vérifications et upload)
   ElegantOTA.loop();
-  // Petite pause pour céder le CPU (optionnel)
+
+  // Pause légère pour céder le cœur CPU (non bloquant)
   delay(10);
 }

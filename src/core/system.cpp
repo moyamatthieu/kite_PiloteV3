@@ -10,6 +10,11 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
+/* === MODULE SYSTÈME ===
+   Implémentation des fonctions système de base, y compris l'initialisation,
+   la gestion des erreurs, et les états globaux du système.
+*/
+
 #include "../../include/core/system.h"
 #include "../../include/utils/logging.h"
 #include <esp_system.h>
@@ -20,14 +25,18 @@
 static void restartTask(void* parameters);
 
 // Variables système globales
-static SystemInfo systemInfo;
-static unsigned long lastUpdateTime = 0;
-static bool systemInitialized = false;
-static uint8_t systemStatus = 0;
-static TaskHandle_t restartTaskHandle = NULL;
+static SystemInfo systemInfo;          // Structure contenant les informations système
+static unsigned long lastUpdateTime = 0; // Dernière mise à jour des informations système
+static bool systemInitialized = false;  // Indique si le système est initialisé
+static uint8_t systemStatus = 0;        // État global du système
+static TaskHandle_t restartTaskHandle = NULL; // Tâche pour redémarrer le système
 
 // === IMPLÉMENTATION DES FONCTIONS ===
 
+/**
+ * Initialise le système et configure le watchdog.
+ * @return Code d'erreur système (SYS_OK si succès).
+ */
 SystemErrorCode systemInit() {
   if (systemInitialized) {
     LOG_WARNING("SYS", "Système déjà initialisé");
@@ -64,6 +73,10 @@ SystemErrorCode systemInit() {
   return SYS_OK;
 }
 
+/**
+ * Retourne les informations système actuelles.
+ * @return Structure SystemInfo contenant les données système.
+ */
 SystemInfo getSystemInfo() {
   // Mettre à jour les informations si nécessaire
   if (millis() - lastUpdateTime > 1000) {
@@ -73,6 +86,9 @@ SystemInfo getSystemInfo() {
   return systemInfo;
 }
 
+/**
+ * Met à jour les informations système (mémoire, CPU, etc.).
+ */
 void updateSystemInfo() {
   // Mettre à jour le temps d'activité (en secondes)
   systemInfo.uptimeSeconds = millis() / 1000;
@@ -89,6 +105,10 @@ void updateSystemInfo() {
   lastUpdateTime = millis();
 }
 
+/**
+ * Redémarre le système après un délai facultatif.
+ * @param delayMs Délai avant redémarrage (en millisecondes).
+ */
 void systemRestart(unsigned long delayMs) {
   if (delayMs == 0) {
     LOG_INFO("SYS", "Redémarrage immédiat du système");
@@ -121,10 +141,18 @@ void systemRestart(unsigned long delayMs) {
   }
 }
 
+/**
+ * Vérifie si le système est en bonne santé.
+ * @return true si le système est sain, false sinon.
+ */
 bool isSystemHealthy() {
   return (systemStatus >= 80); // Considéré sain si >= 80%
 }
 
+/**
+ * Retourne une chaîne décrivant l'état global du système.
+ * @return Chaîne de caractères représentant l'état.
+ */
 const char* getSystemStatusString() {
   if (systemStatus >= 90) return "Excellent";
   if (systemStatus >= 80) return "Bon";
@@ -134,11 +162,18 @@ const char* getSystemStatusString() {
   return "Défaillant";
 }
 
+/**
+ * Alimente les watchdogs pour éviter un redémarrage intempestif.
+ */
 void feedWatchdogs() {
   // Nourrir le watchdog matériel
   esp_task_wdt_reset();
 }
 
+/**
+ * Tâche de redémarrage du système.
+ * @param parameters Paramètres passés à la tâche (délai en ms).
+ */
 static void restartTask(void* parameters) {
   unsigned long delayMs = (unsigned long)parameters;
   
@@ -157,6 +192,11 @@ static void restartTask(void* parameters) {
   vTaskDelete(NULL);
 }
 
+/**
+ * Convertit un code d'erreur système en chaîne de caractères.
+ * @param errorCode Code d'erreur système.
+ * @return Chaîne de caractères décrivant l'erreur.
+ */
 const char* systemErrorToString(SystemErrorCode code) {
   switch (code) {
     case SYS_OK:
@@ -178,6 +218,10 @@ const char* systemErrorToString(SystemErrorCode code) {
   }
 }
 
+/**
+ * Vérifie la santé globale du système.
+ * @return true si tout est correct, false sinon.
+ */
 bool systemHealthCheck() {
   // Vérifier la mémoire disponible
   if (systemInfo.freeHeapBytes < 10000) {
@@ -206,8 +250,8 @@ bool systemHealthCheck() {
 }
 
 /**
- * Vérification périodique de l'état du matériel et tentative de récupération
- * @return true si tout est correct ou a été récupéré, false sinon
+ * Vérifie l'état du matériel et tente une récupération si nécessaire.
+ * @return true si tout est correct ou a été récupéré, false sinon.
  */
 bool systemCheckHardware() {
   bool allOk = true;
@@ -239,6 +283,9 @@ bool systemCheckHardware() {
   return allOk;
 }
 
+/**
+ * Active le mode économie d'énergie.
+ */
 void enterPowerSaveMode() {
   if (systemInfo.systemState == SYS_STATE_POWER_SAVE) {
     return; // Déjà en mode économie d'énergie
@@ -253,6 +300,9 @@ void enterPowerSaveMode() {
   systemInfo.systemState = SYS_STATE_POWER_SAVE;
 }
 
+/**
+ * Désactive le mode économie d'énergie.
+ */
 void exitPowerSaveMode() {
   if (systemInfo.systemState != SYS_STATE_POWER_SAVE) {
     return; // Pas en mode économie d'énergie
@@ -267,20 +317,36 @@ void exitPowerSaveMode() {
   systemInfo.systemState = SYS_STATE_RUNNING;
 }
 
+/**
+ * Retourne la version actuelle du système.
+ * @return Chaîne de caractères contenant la version.
+ */
 const char* getSystemVersion() {
   return SYSTEM_VERSION;
 }
 
+/**
+ * Vérifie si le système est en état d'erreur.
+ * @return true si une erreur est présente, false sinon.
+ */
 bool hasSystemError() {
   return systemInfo.hasError;
 }
 
+/**
+ * Efface toutes les erreurs système.
+ */
 void clearSystemErrors() {
   systemInfo.hasError = false;
   memset(systemInfo.lastErrorMessage, 0, sizeof(systemInfo.lastErrorMessage));
   LOG_INFO("SYS", "Erreurs système effacées");
 }
 
+/**
+ * Gère une erreur système en enregistrant un message et en activant l'indicateur d'erreur.
+ * @param errorSource Source de l'erreur.
+ * @param errorMessage Message décrivant l'erreur.
+ */
 void handleSystemError(const char* errorSource, const char* errorMessage) {
   systemInfo.hasError = true;
   

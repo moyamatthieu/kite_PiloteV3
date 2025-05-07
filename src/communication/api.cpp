@@ -24,9 +24,8 @@ static AsyncWebServer* webServer = nullptr;
 /**
  * Initialise l'API REST
  * @param server Référence au serveur web asynchrone
- * @return true si succès, false si échec
  */
-bool apiInit(AsyncWebServer& server) {
+void apiInit(AsyncWebServer& server) {
   LOG_INFO("API", "Initialisation de l'API REST");
   
   // Stocker une référence au serveur
@@ -42,7 +41,6 @@ bool apiInit(AsyncWebServer& server) {
   server.on("/api/v1/diagnostics", HTTP_GET, handleDiagnosticsApi);
   
   LOG_INFO("API", "API REST initialisée avec succès");
-  return true;
 }
 
 /**
@@ -69,8 +67,6 @@ bool isApiEnabled() {
  * @return Chaîne décrivant l'état du système
  */
 static const char* getApiSystemStatus() {
-  // Dans une implémentation réelle, cela appellerait getSystemStatusString()
-  // Mais comme cette fonction n'est pas disponible pour l'instant, on simule
   int status = random(0, 5);
   switch (status) {
     case 0: return "Excellent";
@@ -92,31 +88,22 @@ void handleSystemApi(AsyncWebServerRequest* request) {
     return;
   }
   
-  // Utiliser la nouvelle version de ArduinoJson (7.x)
-  // Préparer la réponse JSON
   JsonDocument doc;
-  
-  // Informations système
   doc["system"]["version"] = "3.0.0";
   doc["system"]["uptime"] = millis() / 1000;
   doc["system"]["heap"] = ESP.getFreeHeap();
-  doc["system"]["status"] = getApiSystemStatus(); // Utiliser notre fonction locale
-  doc["system"]["healthy"] = isSystemHealthy();
+  doc["system"]["status"] = getApiSystemStatus();
+  doc["system"]["healthy"] = systemHealthCheck();
   
-  // Informations WiFi
   doc["wifi"]["connected"] = (WiFi.status() == WL_CONNECTED);
   doc["wifi"]["ssid"] = WiFi.SSID();
   doc["wifi"]["rssi"] = WiFi.RSSI();
   doc["wifi"]["ip"] = WiFi.localIP().toString();
   
-  // Convertir en chaîne JSON
   String response;
   serializeJson(doc, response);
-  
-  // Envoyer la réponse
   request->send(200, "application/json", response);
   
-  // Mettre à jour les statistiques
   apiStats.requestCount++;
 }
 
@@ -130,11 +117,7 @@ void handleSensorsApi(AsyncWebServerRequest* request) {
     return;
   }
   
-  // Utiliser la nouvelle version de ArduinoJson (7.x)
-  // Préparer la réponse JSON
   JsonDocument doc;
-  
-  // Simuler quelques données de capteurs
   doc["imu"]["roll"] = random(-45, 45);
   doc["imu"]["pitch"] = random(-30, 30);
   doc["imu"]["yaw"] = random(0, 359);
@@ -145,14 +128,10 @@ void handleSensorsApi(AsyncWebServerRequest* request) {
   doc["wind"]["speed"] = random(10, 40);
   doc["wind"]["direction"] = random(0, 359);
   
-  // Convertir en chaîne JSON
   String response;
   serializeJson(doc, response);
-  
-  // Envoyer la réponse
   request->send(200, "application/json", response);
   
-  // Mettre à jour les statistiques
   apiStats.requestCount++;
 }
 
@@ -166,35 +145,24 @@ void handleControlApi(AsyncWebServerRequest* request) {
     return;
   }
   
-  // Vérifier la méthode HTTP
   if (request->method() == HTTP_GET) {
-    // Utiliser la nouvelle version de ArduinoJson (7.x)
-    // Préparer la réponse JSON
     JsonDocument doc;
-    
-    // Simuler quelques données de contrôle
     doc["direction"] = random(-100, 100);
     doc["trim"] = random(-20, 20);
     doc["lineLength"] = random(10, 100);
     doc["autopilot"] = (random(0, 2) == 1);
     
-    // Convertir en chaîne JSON
     String response;
     serializeJson(doc, response);
-    
-    // Envoyer la réponse
     request->send(200, "application/json", response);
   }
   else if (request->method() == HTTP_POST) {
-    // Traiter les commandes de contrôle (simulation)
     request->send(200, "application/json", "{\"result\":\"success\",\"message\":\"Commande reçue\"}");
   }
   else {
-    // Méthode non supportée
     request->send(405, "application/json", "{\"error\":\"Méthode non supportée\"}");
   }
   
-  // Mettre à jour les statistiques
   apiStats.requestCount++;
 }
 
@@ -208,28 +176,20 @@ void handleDiagnosticsApi(AsyncWebServerRequest* request) {
     return;
   }
   
-  // Utiliser la nouvelle version de ArduinoJson (7.x)
-  // Préparer la réponse JSON
   JsonDocument doc;
-  
-  // Informations de diagnostic
-  doc["api"]["requests"] = apiStats.requestCount;
-  doc["api"]["errors"] = apiStats.errorCount;
+doc["api"]["requests"] = apiStats.requestCount;
+doc["api"]["errors"] = apiStats.errorCount;
   
   doc["memory"]["free"] = ESP.getFreeHeap();
   doc["memory"]["total"] = ESP.getHeapSize();
   doc["memory"]["minFree"] = ESP.getMinFreeHeap();
   
   doc["cpu"]["freq"] = ESP.getCpuFreqMHz();
-  doc["cpu"]["temp"] = random(30, 50); // Simuler une température
+  doc["cpu"]["temp"] = random(30, 50);
   
-  // Convertir en chaîne JSON
   String response;
   serializeJson(doc, response);
-  
-  // Envoyer la réponse
   request->send(200, "application/json", response);
   
-  // Mettre à jour les statistiques
   apiStats.requestCount++;
 }

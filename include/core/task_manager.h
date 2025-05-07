@@ -10,6 +10,11 @@
   Auteurs: Équipe Kite PiloteV3
 */
 
+/* === MODULE TASK MANAGER ===
+   Ce module gère les tâches FreeRTOS, y compris leur création, surveillance,
+   et arrêt. Il permet une gestion centralisée des tâches du système.
+*/
+
 #ifndef TASK_MANAGER_H
 #define TASK_MANAGER_H
 
@@ -19,37 +24,41 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 
-// Déclarations anticipées
-class UIManager;
-class WiFiManager;
+// === CONSTANTES ===
+#define MAX_TASKS 10  // Nombre maximum de tâches gérées
 
-// Nombre maximum de tâches
-#define MAX_TASKS 10
+// === STRUCTURES ===
 
-// Structure pour les métriques des tâches
+/**
+ * Structure pour les métriques des tâches.
+ */
 typedef struct {
-    uint32_t cpuUsage;
-    uint32_t stackHighWaterMark;
-    uint32_t lastRunTime;
+    uint32_t cpuUsage;            // Utilisation du CPU par la tâche
+    uint32_t stackHighWaterMark;  // Marque haute de la pile
+    uint32_t lastRunTime;         // Dernière exécution de la tâche
 } TaskStat;
 
-// Structure pour les paramètres de tâches
+/**
+ * Structure pour les paramètres de tâches.
+ */
 typedef struct {
-    int taskIndex;
-    void* manager;
-    uint32_t period;
-    bool isRealtime;
+    int taskIndex;       // Index de la tâche
+    void* manager;       // Pointeur vers le gestionnaire associé
+    uint32_t period;     // Période d'exécution de la tâche
+    bool isRealtime;     // Indique si la tâche est en temps réel
 } TaskParams;
 
-// Structure pour la configuration des tâches
+/**
+ * Structure pour la configuration des tâches.
+ */
 typedef struct {
-    const char* name;
-    TaskFunction_t function;
-    uint32_t stackSize;
-    UBaseType_t priority;
-    BaseType_t core;
-    uint32_t period;
-    bool isRealtime;
+    const char* name;         // Nom de la tâche
+    TaskFunction_t function;  // Fonction associée à la tâche
+    uint32_t stackSize;       // Taille de la pile
+    UBaseType_t priority;     // Priorité de la tâche
+    BaseType_t core;          // Coeur d'exécution
+    uint32_t period;          // Période d'exécution
+    bool isRealtime;          // Indique si la tâche est en temps réel
 } TaskConfig;
 
 /**
@@ -59,53 +68,53 @@ typedef struct {
 class TaskManager {
 private:
     // Handles des tâches
-    TaskHandle_t displayTaskHandle;
-    TaskHandle_t buttonTaskHandle;
-    TaskHandle_t wifiMonitorTaskHandle;
-    TaskHandle_t systemMonitorTaskHandle;
+    TaskHandle_t displayTaskHandle;      // Handle pour la tâche d'affichage
+    TaskHandle_t buttonTaskHandle;       // Handle pour la tâche des boutons
+    TaskHandle_t wifiMonitorTaskHandle;  // Handle pour la tâche de surveillance WiFi
+    TaskHandle_t systemMonitorTaskHandle; // Handle pour la tâche de surveillance système
     
     // Variables d'état
-    bool running;
-    bool tasksRunning;
-    unsigned long lastTaskMetricsTime;
+    bool running;            // Indique si le gestionnaire est en cours d'exécution
+    bool tasksRunning;       // Indique si les tâches sont en cours d'exécution
+    unsigned long lastTaskMetricsTime; // Dernière mise à jour des métriques
     
     // Handles et statistiques des tâches
-    TaskHandle_t taskHandles[MAX_TASKS];
-    TaskParams* taskParams[MAX_TASKS];
-    TaskStat taskStats[MAX_TASKS];
+    TaskHandle_t taskHandles[MAX_TASKS]; // Tableau des handles des tâches
+    TaskParams* taskParams[MAX_TASKS];   // Tableau des paramètres des tâches
+    TaskStat taskStats[MAX_TASKS];       // Tableau des statistiques des tâches
     
     // Ressources partagées
-    static QueueHandle_t messageQueue;
-    static SemaphoreHandle_t displayMutex;
-    static UIManager* uiManager;
-    static WiFiManager* wifiManager;
+    static QueueHandle_t messageQueue;      // File de messages partagée
+    static SemaphoreHandle_t displayMutex;  // Mutex pour l'affichage
+    static UIManager* uiManager;            // Pointeur vers le gestionnaire d'interface utilisateur
+    static WiFiManager* wifiManager;        // Pointeur vers le gestionnaire WiFi
     
     // Fonctions de tâches
-    static void displayTask(void* parameters);
-    static void buttonTask(void* parameters);
-    static void networkTask(void* parameters);
-    static void controlTask(void* parameters);
-    static void inputTask(void* parameters);
-    static void monitorTask(void* parameters);
-    static void sensorTask(void* parameters);
+    static void displayTask(void* parameters);  // Fonction pour la tâche d'affichage
+    static void buttonTask(void* parameters);   // Fonction pour la tâche des boutons
+    static void networkTask(void* parameters);  // Fonction pour la tâche réseau
+    static void controlTask(void* parameters);  // Fonction pour la tâche de contrôle
+    static void inputTask(void* parameters);    // Fonction pour la tâche d'entrée
+    static void monitorTask(void* parameters);  // Fonction pour la tâche de surveillance
+    static void sensorTask(void* parameters);   // Fonction pour la tâche des capteurs
     
 public:
     // Constructeur et destructeur
-    TaskManager();
-    ~TaskManager();
+    TaskManager();  // Constructeur du gestionnaire de tâches
+    ~TaskManager(); // Destructeur du gestionnaire de tâches
     
     // Initialisation et démarrage
-    bool begin(UIManager* ui, WiFiManager* wifi);
-    bool startTasks();
-    void stopTasks();
-    void stopAllTasks();
+    bool begin(UIManager* ui, WiFiManager* wifi); // Initialise le gestionnaire avec les gestionnaires associés
+    bool startTasks();                            // Démarre les tâches gérées
+    void stopTasks();                             // Arrête les tâches gérées
+    void stopAllTasks();                          // Arrête toutes les tâches
     
     // Surveillance des tâches
-    void updateTaskMetrics();
-    bool checkTasksHealth();
+    void updateTaskMetrics();  // Met à jour les métriques des tâches
+    bool checkTasksHealth();   // Vérifie l'état de santé des tâches
     
     // Getters
-    bool isRunning() const { return running; }
+    bool isRunning() const { return running; } // Retourne l'état du gestionnaire
 };
 
 #endif // TASK_MANAGER_H

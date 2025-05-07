@@ -21,6 +21,7 @@
 #include <Arduino.h>
 
 // === NIVEAUX DE LOG ===
+typedef uint8_t LogLevel;
 #define LOG_LEVEL_NONE    0  // Pas de journalisation
 #define LOG_LEVEL_ERROR   1  // Erreurs critiques uniquement
 #define LOG_LEVEL_WARNING 2  // Erreurs et avertissements
@@ -40,7 +41,6 @@
 #endif
 
 // === MACROS DE LOGGING ===
-
   // Log d'erreur
   #define LOG_ERROR(tag, format, ...) \
     if (LOG_LEVEL >= LOG_LEVEL_ERROR) { \

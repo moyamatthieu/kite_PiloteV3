@@ -43,6 +43,29 @@ typedef struct {
   uint8_t maxWindSpeed;        // Vitesse de vent maximale autorisée (en km/h)
 } AutopilotParameters;
 
+// === DÉFINITION DES CONSTANTES DE CONTRÔLE ===
+#define MIN_ANGLE -45        // Angle minimum en degrés pour le contrôle de direction
+#define MAX_ANGLE 45         // Angle maximum en degrés pour le contrôle de direction
+#define DEFAULT_SPEED 1.0    // Vitesse par défaut pour les mouvements du kite
+
+// Structure pour les paramètres PID du pilote automatique
+typedef struct {
+    // Paramètres du contrôleur PID
+    float Kp;               // Gain proportionnel - Réactivité immédiate aux erreurs
+    float Ki;               // Gain intégral - Correction des erreurs persistantes
+    float Kd;               // Gain dérivé - Anticipation des changements d'erreur
+    
+    // Limites de sécurité
+    float maxOutput;        // Sortie maximale du contrôleur
+    float minOutput;        // Sortie minimale du contrôleur
+    float maxIntegral;      // Limite d'accumulation de l'erreur intégrale
+    
+    // Variables d'état
+    float lastError;        // Dernière erreur mesurée pour calcul dérivé
+    float integral;         // Accumulation des erreurs pour terme intégral
+    float setpoint;        // Point de consigne désiré
+} PIDParams;
+
 // État de l'autopilote
 typedef struct {
   AutopilotMode currentMode;    // Mode actuel
@@ -53,6 +76,12 @@ typedef struct {
   bool isStable;                // Indicateur de stabilité
   uint32_t flightTimeSeconds;   // Temps de vol en secondes
   char statusMessage[64];       // Message d'état
+  bool enabled;                 // État d'activation du pilote automatique
+  float targetAngle;            // Angle cible pour le contrôle de direction
+  float currentAngle;           // Angle actuel mesuré
+  float windSpeed;              // Vitesse du vent actuelle
+  float lineLength;             // Longueur actuelle des lignes
+  PIDParams pidParams;          // Paramètres du contrôleur PID
 } AutopilotState;
 
 // === FONCTIONS PUBLIQUES ===
@@ -89,5 +118,20 @@ bool isAutopilotActive();
 
 // Obtenir le niveau de confiance de l'autopilote
 uint8_t getAutopilotConfidence();
+
+// Activation/désactivation du pilote automatique
+void autopilotEnable(bool enable);
+
+// Mise à jour des paramètres du contrôleur PID
+void updatePIDParams(const PIDParams* params);
+
+// Calcul de la commande de contrôle
+float computeControlCommand(float currentAngle, float targetAngle);
+
+// Mise à jour de l'état du pilote automatique
+void updateAutopilotState(float windSpeed, float lineLength);
+
+// Fonction de sécurité pour vérifier les limites
+bool checkSafetyLimits();
 
 #endif // AUTOPILOT_H
