@@ -13,6 +13,9 @@
 #include "hardware/io/display_manager.h"
 #include "utils/logging.h"
 
+// Variable globale pour l'état du système (utilisée dans l'affichage)
+static uint8_t systemStatus = 100; // 100% par défaut, représente l'état de santé du système
+
 // Caractères personnalisés
 const uint8_t charUp[] = {
   0b00100, 0b01110, 0b11111, 0b00100, 0b00100, 0b00000, 0b00000, 0b00000
@@ -27,7 +30,15 @@ const uint8_t charBlock[] = {
 /**
  * Constructeur - initialise l'écran LCD
  */
-DisplayManager::DisplayManager() : lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS), lcdInitialized(false) {
+DisplayManager::DisplayManager() : 
+  lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS), 
+  lcdInitialized(false), 
+  lastInitTime(0),
+  lastCheckTime(0),
+  recoveryAttempts(0),
+  lastUpdateTime(0),
+  successfulUpdates(0) {
+  // Les variables sont initialisées dans la liste d'initialisation
 }
 
 /**
@@ -39,42 +50,123 @@ DisplayManager::~DisplayManager() {
 
 /**
  * Configure l'interface I2C pour la communication avec l'écran LCD
+ * @return true si l'initialisation réussit, false sinon
  */
-void DisplayManager::setupI2C() {
+bool DisplayManager::setupI2C() {
   Wire.begin(I2C_SDA, I2C_SCL);
   delay(50); // Petit délai pour stabiliser l'I2C
-  LOG_INFO("DISPLAY", "I2C configuré: SDA=%d, SCL=%d", I2C_SDA, I2C_SCL);
+  
+  // Vérifier si le bus I2C fonctionne
+  Wire.beginTransmission(LCD_I2C_ADDR);
+  byte error = Wire.endTransmission();
+  
+  if (error == 0) {
+    LOG_INFO("DISPLAY", "I2C configuré: SDA=%d, SCL=%d", I2C_SDA, I2C_SCL);
+    i2cInitialized = true;
+    return true;
+  } else {
+    LOG_ERROR("DISPLAY", "Erreur I2C lors de la configuration (code: %d)", error);
+    i2cInitialized = false;
+    return false;
+  }
 }
 
 /**
- * Initialise l'écran LCD
+ * Initialise l'écran LCD avec une stratégie plus robuste
  * @return true si l'initialisation réussit, false sinon
  */
 bool DisplayManager::initLCD() {
-  LOG_INFO("DISPLAY", "Initialisation de l'écran LCD...");
+  // Marquer comme non initialisé au début
+  lcdInitialized = false;
   
-  // Initialisation avec plusieurs tentatives
-  for (int attempt = 1; attempt <= 3; attempt++) {
-    LOG_INFO("DISPLAY", "Tentative %d/3", attempt);
+  // Réinitialiser les variables d'état
+  recoveryAttempts = 0;
+  
+  LOG_INFO("DISPLAY", "Initialisation de l'écran LCD");
+  
+  // Configuration I2C si nécessaire
+  if (!i2cInitialized) {
+    LOG_INFO("DISPLAY", "Configuration de l'I2C...");
     
-    lcd.init();
-    lcd.backlight();
-    lcd.clear();
-    
-    // Test d'affichage simple
-    lcd.setCursor(0, 0);
-    lcd.print("Initialisation...");
+    // Réinitialiser le bus I2C
+    Wire.end();
     delay(100);
     
-    // Si on arrive ici, l'initialisation a réussi
-    lcdInitialized = true;
-    LOG_INFO("DISPLAY", "Écran LCD initialisé avec succès");
-    return true;
+    // Commencer avec une fréquence plus basse
+    if (!setupI2C()) {
+      LOG_ERROR("DISPLAY", "Échec de configuration I2C - tentative avec fréquence basse");
+      
+      // Nouvelle tentative avec une fréquence plus basse
+      Wire.setClock(100000); // 100 kHz au lieu du 400 kHz par défaut
+      if (!setupI2C()) {
+        LOG_ERROR("DISPLAY", "Échec de configuration I2C même à basse fréquence");
+        return false;
+      }
+    }
   }
   
-  // Échec après plusieurs tentatives
-  LOG_ERROR("DISPLAY", "Échec d'initialisation de l'écran LCD");
-  lcdInitialized = false;
+  // Tentatives d'initialisation multiples
+  const uint8_t maxAttempts = 3;
+  for (uint8_t attempt = 1; attempt <= maxAttempts; attempt++) {
+    LOG_INFO("DISPLAY", "Tentative %d/%d", attempt, maxAttempts);
+    
+    // Force de réinitialisation matérielle du bus I2C entre les tentatives
+    if (attempt > 1) {
+      Wire.end();
+      delay(200);
+      Wire.begin(I2C_SDA, I2C_SCL);
+      Wire.setClock(100000); // Basse fréquence pour plus de fiabilité
+      delay(100);
+    }
+    
+    // Test initial du bus I2C - vérification que le LCD répond
+    Wire.beginTransmission(LCD_I2C_ADDR);
+    byte error = Wire.endTransmission();
+    
+    if (error != 0) {
+      LOG_WARNING("DISPLAY", "Erreur I2C pendant la tentative %d (code: %d)", attempt, error);
+      continue; // Passer à la prochaine tentative
+    }
+    
+    // Initialisation en deux étapes pour plus de stabilité
+    lcd.init();
+    delay(150); // Délai critique pour la stabilisation du matériel
+    
+    // Second init avec reset complet
+    lcd.begin(LCD_COLS, LCD_ROWS);
+    delay(100);
+    
+    // Tester l'écran avec des opérations de base
+    lcd.clear();
+    lcd.home();
+    lcd.backlight();
+    lcd.setCursor(0, 0);
+    lcd.print("Test LCD");
+    
+    // Vérification supplémentaire que l'écran est réellement fonctionnel
+    if (checkLCDConnection()) {
+      LOG_INFO("DISPLAY", "Écran LCD initialisé avec succès");
+      
+      // Compléter le processus d'initialisation
+      lcd.clear();
+      createCustomChars();
+      
+      // Mettre à jour l'état
+      lcdInitialized = true;
+      initAttemptCount = attempt;
+      lastInitTime = millis();
+      
+      return true;
+    }
+    
+    LOG_WARNING("DISPLAY", "Tentative %d a échoué", attempt);
+    delay(300); // Délai entre les tentatives
+  }
+  
+  LOG_ERROR("DISPLAY", "Échec d'initialisation après %d tentatives", maxAttempts);
+  
+  // Permettre le fonctionnement sans écran LCD
+  LOG_WARNING("DISPLAY", "Poursuite du fonctionnement sans écran LCD");
   return false;
 }
 
@@ -116,255 +208,542 @@ void DisplayManager::centerText(uint8_t row, const char* text) {
 }
 
 /**
- * Affiche un message avec titre sur l'écran LCD
- * @param title Titre du message (1ère ligne)
- * @param message Corps du message (lignes suivantes)
+ * Met à jour l'écran principal avec optimisation de la fréquence
+ * de rafraîchissement et protection contre les mises à jour multiples
  */
-void DisplayManager::displayMessage(const char* title, const char* message) {
+void DisplayManager::updateMainDisplay() {
+  // Protection contre les mises à jour trop fréquentes
+  unsigned long currentTime = millis();
+  if (currentTime - lastUpdateTime < DISPLAY_UPDATE_THROTTLE) {
+    return;  // Sortir si la dernière mise à jour est trop récente
+  }
+  lastUpdateTime = currentTime;
+  
+  // Vérifier que l'écran est initialisé
   if (!lcdInitialized) {
-    LOG_INFO("DISPLAY", "%s: %s", title, message);
     return;
   }
   
-  clear();
-  centerText(0, title);
+  // Création d'un mutex pour éviter les accès concurrents
+  static SemaphoreHandle_t displayMutex = NULL;
+  if (displayMutex == NULL) {
+    displayMutex = xSemaphoreCreateMutex();
+  }
   
-  // Afficher le message sur plusieurs lignes si nécessaire
-  int msgLen = strlen(message);
-  int charsPerLine = LCD_COLS;
+  // Tenter d'obtenir le mutex avec un court timeout
+  if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    LOG_WARNING("DISPLAY", "Écran déjà en cours d'utilisation, mise à jour ignorée");
+    return;
+  }
   
-  for (int line = 0; line < 3 && msgLen > 0; line++) {
-    int toCopy = min(msgLen, charsPerLine);
-    lcd.setCursor(0, line + 1);
+  // Protéger contre les exceptions pour ne pas laisser le mutex verrouillé
+  try {
+    lcd.clear();
     
-    // Copier une partie du message
-    char lineBuffer[LCD_COLS + 1];
-    strncpy(lineBuffer, message, toCopy);
-    lineBuffer[toCopy] = '\0';
+    // En-tête centrée
+    centerText(0, "Kite PiloteV3");
     
-    lcd.print(lineBuffer);
-    message += toCopy;
-    msgLen -= toCopy;
+    // Ligne 1 - État WiFi
+    lcd.setCursor(0, 1);
+    if (WiFi.status() == WL_CONNECTED) {
+      lcd.print("WiFi: ");
+      String ssid = WiFi.SSID();
+      // Tronquer le SSID s'il est trop long
+      if (ssid.length() > LCD_COLS - 6) {
+        ssid = ssid.substring(0, LCD_COLS - 9) + "...";
+      }
+      lcd.print(ssid);
+    } else {
+      lcd.print("WiFi: Déconnecté");
+    }
+    
+    // Ligne 2 - Information système
+    lcd.setCursor(0, 2);
+    lcd.print("Sys: ");
+    // Récupérer une valeur de sysStatus sécurisée
+    uint8_t status = systemStatus;
+    status = constrain(status, 0, 100);
+    // Afficher l'état du système de manière compacte
+    if (status >= 90) lcd.print("Excellent");
+    else if (status >= 75) lcd.print("Bon");
+    else if (status >= 50) lcd.print("Normal");
+    else if (status >= 25) lcd.print("Faible");
+    else lcd.print("Critique");
+    
+    // Ligne 3 - Affichage du temps de fonctionnement
+    lcd.setCursor(0, 3);
+    unsigned long uptimeSeconds = millis() / 1000;
+    unsigned long hours = uptimeSeconds / 3600;
+    unsigned long minutes = (uptimeSeconds % 3600) / 60;
+    unsigned long seconds = uptimeSeconds % 60;
+    
+    lcd.print("Uptime: ");
+    if (hours < 10) lcd.print("0");
+    lcd.print(hours);
+    lcd.print(":");
+    if (minutes < 10) lcd.print("0");
+    lcd.print(minutes);
+    lcd.print(":");
+    if (seconds < 10) lcd.print("0");
+    lcd.print(seconds);
+    
+    // Actualiser le compteur de mises à jour réussies
+    successfulUpdates++;
+  } 
+  catch (...) {
+    LOG_ERROR("DISPLAY", "Exception lors de la mise à jour de l'écran principal");
+  }
+  
+  // Libérer le mutex quelle que soit l'issue
+  xSemaphoreGive(displayMutex);
+}
+
+/**
+ * Affiche un message sur l'écran avec protection contre les mises à jour multiples
+ * @param title Titre du message
+ * @param message Corps du message
+ * @param duration Durée d'affichage en ms (0 = permanent)
+ */
+void DisplayManager::displayMessage(const char* title, const char* message, unsigned long duration) {
+  // Vérifier que l'écran est initialisé
+  if (!lcdInitialized) {
+    LOG_WARNING("DISPLAY", "Écran non initialisé, impossible d'afficher le message");
+    return;
+  }
+  
+  // Création d'un mutex pour éviter les accès concurrents
+  static SemaphoreHandle_t displayMutex = NULL;
+  if (displayMutex == NULL) {
+    displayMutex = xSemaphoreCreateMutex();
+  }
+  
+  // Tenter d'obtenir le mutex avec un court timeout
+  if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    LOG_WARNING("DISPLAY", "Écran déjà en cours d'utilisation, message ignoré");
+    return;
+  }
+  
+  // Protéger contre les exceptions
+  try {
+    // Effacer l'écran
+    lcd.clear();
+    
+    // Afficher le titre centré
+    centerText(0, title);
+    
+    // Calculer la longueur du message
+    size_t msgLen = strlen(message);
+    int startIdx = 0;
+    
+    // Afficher le message sur trois lignes maximum (1, 2, 3)
+    for (int row = 1; row < LCD_ROWS && startIdx < msgLen; row++) {
+      int charsLeft = msgLen - startIdx;
+      int charsToShow = min(charsLeft, LCD_COLS);
+      
+      // Si la ligne contient plus de caractères que LCD_COLS, chercher un espace
+      if (charsLeft > LCD_COLS) {
+        int lastSpace = -1;
+        for (int i = 0; i < LCD_COLS; i++) {
+          if (message[startIdx + i] == ' ') {
+            lastSpace = i;
+          }
+        }
+        
+        // S'il y a un espace, couper là
+        if (lastSpace != -1) {
+          charsToShow = lastSpace;
+        }
+      }
+      
+      // Positionner le curseur et afficher la partie du message
+      lcd.setCursor(0, row);
+      for (int i = 0; i < charsToShow; i++) {
+        lcd.print(message[startIdx + i]);
+      }
+      
+      // Avancer l'index de départ
+      startIdx += charsToShow;
+      if (charsToShow < charsLeft && message[startIdx] == ' ') {
+        startIdx++; // Sauter l'espace en début de ligne suivante
+      }
+    }
+    
+    lastUpdateTime = millis();
+  } 
+  catch (...) {
+    LOG_ERROR("DISPLAY", "Exception lors de l'affichage du message");
+  }
+  
+  // Libérer le mutex
+  xSemaphoreGive(displayMutex);
+  
+  // Si une durée est spécifiée, revenir à l'écran principal après cette durée
+  if (duration > 0) {
+    // Créer une tâche qui attendra la durée spécifiée puis reviendra à l'écran principal
+    static TaskHandle_t messageTaskHandle = NULL;
+    
+    // Supprimer l'ancienne tâche si elle existe
+    if (messageTaskHandle != NULL) {
+      vTaskDelete(messageTaskHandle);
+      messageTaskHandle = NULL;
+    }
+    
+    // Structure pour passer les paramètres à la tâche
+    struct MessageTaskParams {
+      DisplayManager* display;
+      unsigned long duration;
+    };
+    
+    // Créer le paramètre
+    MessageTaskParams* params = new MessageTaskParams{this, duration};
+    
+    // Créer la tâche
+    xTaskCreate(
+      [](void* pvParameters) {
+        MessageTaskParams* params = static_cast<MessageTaskParams*>(pvParameters);
+        vTaskDelay(pdMS_TO_TICKS(params->duration));
+        params->display->updateMainDisplay();
+        delete params;
+        vTaskDelete(NULL);
+      },
+      "MessageTimer",
+      2048,
+      params,
+      1,
+      &messageTaskHandle
+    );
   }
 }
 
 /**
- * Met à jour l'affichage principal
- * Affiche les informations principales du système
+ * Vérifie l'état de l'écran LCD et tente une récupération si nécessaire
+ * @return true si l'écran est fonctionnel, false sinon
  */
-void DisplayManager::updateMainDisplay() {
-  if (!lcdInitialized) return;
+bool DisplayManager::checkAndRecover() {
+  // Vérifier d'abord si nous sommes déjà initialisés
+  if (lcdInitialized && checkLCDConnection()) {
+    // L'écran est déjà fonctionnel
+    return true;
+  }
   
-  clear();
-  centerText(0, "Kite PiloteV3");
+  LOG_WARNING("DISPLAY", "Écran LCD non fonctionnel, tentative de récupération");
   
-  // Ligne 1: État du WiFi
-  lcd.setCursor(0, 1);
-  if (WiFi.status() == WL_CONNECTED) {
-    lcd.print("WiFi: ");
-    lcd.print(WiFi.SSID());
+  // Tentative de réinitialisation matérielle du bus I2C
+  Wire.end();
+  delay(50);
+  
+  if (!setupI2C()) {
+    LOG_ERROR("DISPLAY", "Échec de réinitialisation du bus I2C");
+    return false;
+  }
+  
+  // Tentative de réinitialisation de l'écran LCD
+  bool recovered = initLCD();
+  
+  if (recovered) {
+    LOG_INFO("DISPLAY", "Récupération de l'écran LCD réussie");
+    
+    // Réinitialiser les caractères personnalisés
+    createCustomChars();
+    
+    // Forcer une mise à jour pour vérifier que tout fonctionne
+    updateMainDisplay();
   } else {
-    lcd.print("WiFi: Deconnecte");
+    LOG_ERROR("DISPLAY", "Échec de récupération de l'écran LCD");
   }
   
-  // Ligne 2: État du système
-  lcd.setCursor(0, 2);
-  lcd.print("Systeme: Pret");
-  
-  // Ligne 3: Temps de fonctionnement
-  lcd.setCursor(0, 3);
-  unsigned long uptime = millis() / 1000;
-  lcd.print("Uptime: ");
-  lcd.print(uptime);
-  lcd.print("s");
+  return recovered;
 }
 
 /**
- * Affiche les informations WiFi sur l'écran LCD
- * @param ssid Nom du réseau WiFi
- * @param ip Adresse IP attribuée
+ * Affiche l'état actuel OTA avec une barre de progression optimisée
+ * @param current Nombre d'octets transférés
+ * @param total Taille totale en octets
  */
-void DisplayManager::displayWiFiInfo(const char* ssid, IPAddress ip) {
-  if (!lcdInitialized) return;
+void DisplayManager::displayOTAProgress(size_t current, size_t total) {
+  // Vérifier que l'écran est initialisé
+  if (!lcdInitialized) {
+    return;
+  }
   
-  clear();
-  centerText(0, "Info WiFi");
+  // Protection contre les mises à jour trop fréquentes
+  unsigned long currentTime = millis();
+  if (currentTime - lastUpdateTime < 500) { // Limiter à max 2 FPS pour OTA
+    return;
+  }
+  lastUpdateTime = currentTime;
   
-  // Ligne 1: SSID
-  lcd.setCursor(0, 1);
-  lcd.print("SSID: ");
-  lcd.print(ssid);
+  // Création d'un mutex pour éviter les accès concurrents
+  static SemaphoreHandle_t displayMutex = NULL;
+  if (displayMutex == NULL) {
+    displayMutex = xSemaphoreCreateMutex();
+  }
   
-  // Ligne 2: Adresse IP
-  lcd.setCursor(0, 2);
-  lcd.print("IP: ");
-  lcd.print(ip.toString());
+  // Tenter d'obtenir le mutex avec un court timeout
+  if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    return;
+  }
   
-  // Ligne 3: Force du signal
-  lcd.setCursor(0, 3);
-  lcd.print("Signal: ");
-  lcd.print(WiFi.RSSI());
-  lcd.print(" dBm");
+  try {
+    lcd.clear();
+    
+    // Titre
+    centerText(0, "Mise à jour OTA");
+    
+    // Afficher le pourcentage
+    int percentage = (current * 100) / total;
+    lcd.setCursor(0, 1);
+    lcd.print("Progression: ");
+    lcd.print(percentage);
+    lcd.print("%");
+    
+    // Afficher la taille en Ko
+    lcd.setCursor(0, 2);
+    lcd.print(current / 1024);
+    lcd.print("Ko / ");
+    lcd.print(total / 1024);
+    lcd.print("Ko");
+    
+    // Barre de progression
+    int progressChars = (current * LCD_COLS) / total;
+    lcd.setCursor(0, 3);
+    for (int i = 0; i < LCD_COLS; i++) {
+      if (i < progressChars) {
+        lcd.write(byte(3)); // Caractère block plein
+      } else {
+        lcd.print(".");
+      }
+    }
+  } 
+  catch (...) {
+    LOG_ERROR("DISPLAY", "Exception lors de l'affichage de la progression OTA");
+  }
+  
+  // Libérer le mutex
+  xSemaphoreGive(displayMutex);
 }
 
 /**
- * Affiche l'écran d'accueil
+ * Vérifie la connexion avec l'écran LCD
+ * @return true si l'écran répond, false sinon
+ */
+bool DisplayManager::checkLCDConnection() {
+  // Vérifier que le périphérique I2C répond
+  Wire.beginTransmission(LCD_I2C_ADDR);
+  byte error = Wire.endTransmission();
+  
+  if (error != 0) {
+    LOG_WARNING("DISPLAY", "Écran LCD non détecté (erreur I2C: %d)", error);
+    lcdInitialized = false;
+    return false;
+  }
+  
+  // Si l'écran était déjà initialisé, on considère qu'il fonctionne toujours
+  if (lcdInitialized) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Tente de récupérer l'écran LCD en cas de dysfonctionnement
+ * @return true si la récupération a réussi, false sinon
+ */
+bool DisplayManager::recoverLCD() {
+  LOG_INFO("DISPLAY", "Tentative de récupération de l'écran LCD...");
+  
+  // Limiter le nombre de tentatives de récupération consécutives
+  recoveryAttempts++;
+  if (recoveryAttempts > 3) {
+    unsigned long timeSinceLastRecovery = millis() - lastCheckTime;
+    if (timeSinceLastRecovery < 60000) {  // 1 minute
+      LOG_WARNING("DISPLAY", "Trop de tentatives récentes, attente avant nouvelle tentative");
+      return false;
+    }
+    // Réinitialiser le compteur après une période d'attente
+    recoveryAttempts = 1;
+  }
+  
+  // Reset I2C et LCD
+  Wire.end();
+  delay(100);
+  setupI2C();
+  
+  // Tenter de réinitialiser l'écran
+  bool result = initLCD();
+  if (result) {
+    // Recréer les caractères personnalisés
+    createCustomChars();
+    recoveryAttempts = 0;
+  }
+  
+  return result;
+}
+
+/**
+ * Affiche l'écran de bienvenue
  * @param simpleMode Mode simple (true) ou complet (false)
  */
 void DisplayManager::displayWelcomeScreen(bool simpleMode) {
   if (!lcdInitialized) return;
   
-  clear();
+  lcd.clear();
+  
+  // En-tête avec titre centré
+  centerText(0, "Kite PiloteV3");
   
   if (simpleMode) {
-    // Mode simple: juste le titre
-    centerText(0, "Kite PiloteV3");
-    centerText(1, "Bienvenue");
-    centerText(3, "Initialisation...");
+    // Version simple - uniquement "INIT" en grand
+    centerText(1, "INITIALISATION");
+    centerText(3, SYSTEM_VERSION);
   } else {
-    // Mode complet: plus d'informations
-    centerText(0, "Kite PiloteV3");
-    centerText(1, "Systeme d'autopilote");
-    centerText(2, "Version 3.0.0");
-    centerText(3, "Initialisation...");
+    // Version complète avec plus d'informations
+    lcd.setCursor(0, 1);
+    lcd.print("Version: ");
+    lcd.print(SYSTEM_VERSION);
+    
+    lcd.setCursor(0, 2);
+    lcd.print("Build: ");
+    lcd.print(SYSTEM_BUILD_DATE);
+    
+    lcd.setCursor(0, 3);
+    lcd.print("System starting...");
   }
 }
 
 /**
- * Affiche les statistiques système sur l'écran LCD
+ * Affiche les informations WiFi
+ * @param ssid SSID du réseau WiFi
+ * @param ip Adresse IP
  */
-void DisplayManager::displaySystemStats() {
+void DisplayManager::displayWiFiInfo(const char* ssid, IPAddress ip) {
   if (!lcdInitialized) return;
   
-  clear();
-  centerText(0, "Statistiques");
+  lcd.clear();
   
-  // Mémoire
+  centerText(0, "WiFi Info");
+  
   lcd.setCursor(0, 1);
-  lcd.print("Mem: ");
-  lcd.print(ESP.getFreeHeap() / 1024);
-  lcd.print("/");
-  lcd.print(ESP.getHeapSize() / 1024);
-  lcd.print(" KB");
+  lcd.print("SSID: ");
+  lcd.print(ssid);
   
-  // CPU
   lcd.setCursor(0, 2);
-  lcd.print("CPU: ");
-  lcd.print(ESP.getCpuFreqMHz());
-  lcd.print(" MHz");
+  lcd.print("IP: ");
+  lcd.print(ip[0]);
+  lcd.print(".");
+  lcd.print(ip[1]);
+  lcd.print(".");
+  lcd.print(ip[2]);
+  lcd.print(".");
+  lcd.print(ip[3]);
   
-  // Uptime
   lcd.setCursor(0, 3);
-  lcd.print("Uptime: ");
-  lcd.print(millis() / 1000);
-  lcd.print("s");
+  lcd.print("Port: ");
+  lcd.print(SERVER_PORT);
 }
 
 /**
- * Affiche la progression d'une mise à jour OTA
- * @param current Nombre d'octets téléchargés
- * @param total Taille totale du fichier
- */
-void DisplayManager::displayOTAProgress(size_t current, size_t total) {
-  if (!lcdInitialized) return;
-  
-  clear();
-  centerText(0, "Mise a jour OTA");
-  
-  // Afficher les valeurs
-  lcd.setCursor(0, 1);
-  lcd.print(current);
-  lcd.print(" / ");
-  lcd.print(total);
-  lcd.print(" octets");
-  
-  // Pourcentage
-  int percent = (current * 100) / total;
-  lcd.setCursor(0, 2);
-  lcd.print("Progression: ");
-  lcd.print(percent);
-  lcd.print("%");
-  
-  // Barre de progression
-  drawProgressBar(3, percent);
-}
-
-/**
- * Affiche le résultat d'une mise à jour OTA
- * @param success true si la mise à jour est réussie, false sinon
+ * Affiche le statut de fin OTA
+ * @param success true si la mise à jour a réussi, false sinon
  */
 void DisplayManager::displayOTAStatus(bool success) {
   if (!lcdInitialized) return;
   
-  clear();
-  centerText(0, "Resultat OTA");
+  lcd.clear();
+  
+  centerText(0, "Mise à jour OTA");
   
   if (success) {
-    centerText(1, "Mise a jour reussie!");
-    centerText(3, "Redemarrage...");
+    centerText(1, "Terminée avec succès");
+    centerText(2, "Redémarrage...");
   } else {
-    centerText(1, "Echec de la mise");
-    centerText(2, "a jour!");
-    centerText(3, "Veuillez reessayer");
+    centerText(1, "ÉCHEC");
+    centerText(2, "Fonctionnement normal");
+    centerText(3, "conservé");
   }
 }
 
 /**
- * Dessine une barre de progression sur une ligne du LCD
- * @param row Numéro de ligne (0-3)
- * @param percent Pourcentage de progression (0-100)
- */
-void DisplayManager::drawProgressBar(uint8_t row, uint8_t percent) {
-  if (!lcdInitialized || row >= LCD_ROWS) return;
-  
-  // Limiter le pourcentage
-  percent = constrain(percent, 0, 100);
-  
-  // Calculer le nombre de blocs pleins
-  int numBlocks = (percent * LCD_COLS) / 100;
-  
-  lcd.setCursor(0, row);
-  
-  // Dessiner les blocs pleins
-  for (int i = 0; i < numBlocks; i++) {
-    lcd.write(2);  // Caractère de bloc plein
-  }
-  
-  // Espaces pour le reste
-  for (int i = numBlocks; i < LCD_COLS; i++) {
-    lcd.print(" ");
-  }
-}
-
-/**
- * Affiche l'état en direct sur l'écran LCD
- * @param direction Direction actuelle
- * @param trim Valeur de trim
- * @param lineLength Longueur de ligne en pourcentage
- * @param wifi État du WiFi (true si connecté)
+ * Affiche les informations de statut en direct
+ * @param direction Angle de direction (-90 à +90)
+ * @param trim Angle de trim (-45 à +45)
+ * @param lineLength Longueur de ligne (0 à 100)
+ * @param wifiConnected État de la connexion WiFi
  * @param uptime Temps de fonctionnement en secondes
  */
-void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, bool wifi, unsigned long uptime) {
+void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, bool wifiConnected, unsigned long uptime) {
   if (!lcdInitialized) return;
-  clear();
-  // Ligne 1 : WiFi et uptime
-  lcd.setCursor(0, 0);
-  lcd.print(wifi ? "WiFi:OK " : "WiFi:-- ");
-  lcd.print("Up:");
-  lcd.print(uptime);
-  lcd.print("s");
-  // Ligne 2 : Direction et Trim
+  
+  // Protection contre les mises à jour trop fréquentes
+  unsigned long currentTime = millis();
+  if (currentTime - lastUpdateTime < DISPLAY_UPDATE_THROTTLE) {
+    return;
+  }
+  lastUpdateTime = currentTime;
+  
+  lcd.clear();
+  
+  // Afficher le titre
+  centerText(0, "Statut Kite");
+  
+  // Ligne 1 - Direction et WiFi
   lcd.setCursor(0, 1);
   lcd.print("Dir:");
-  lcd.print(direction);
-  lcd.print("   Trim:");
-  lcd.print(trim);
-  // Ligne 3 : Longueur de ligne
+  
+  // Afficher la direction avec une petite barre de progression
+  int dirPos = map(constrain(direction, -90, 90), -90, 90, 0, 9);
+  for (int i = 0; i < 10; i++) {
+    if (i == dirPos) {
+      lcd.print("|");
+    } else {
+      lcd.print("-");
+    }
+  }
+  
+  // Afficher l'icône WiFi
+  lcd.setCursor(17, 1);
+  if (wifiConnected) {
+    lcd.write(byte(2)); // Bloc plein = WiFi connecté
+  } else {
+    lcd.print("X"); // X = WiFi déconnecté
+  }
+  
+  // Ligne 2 - Trim
   lcd.setCursor(0, 2);
-  lcd.print("Longueur:");
-  lcd.print(lineLength);
-  lcd.print("%");
-  // Ligne 4 : Aide
+  lcd.print("Trim:");
+  
+  // Afficher le trim avec une petite barre de progression
+  int trimPos = map(constrain(trim, -45, 45), -45, 45, 0, 9);
+  for (int i = 0; i < 10; i++) {
+    if (i == trimPos) {
+      lcd.print("|");
+    } else {
+      lcd.print("-");
+    }
+  }
+  
+  // Ligne 3 - Longueur de ligne et uptime
   lcd.setCursor(0, 3);
-  lcd.print("Pots=Ctrl  Btns=Menu");
+  lcd.print("Ligne:");
+  
+  // Afficher la longueur avec une petite barre de progression
+  int lenPos = map(constrain(lineLength, 0, 100), 0, 100, 0, 5);
+  for (int i = 0; i < 6; i++) {
+    if (i <= lenPos) {
+      lcd.write(byte(2)); // Bloc plein
+    } else {
+      lcd.print(".");
+    }
+  }
+  
+  // Afficher le temps de fonctionnement
+  lcd.setCursor(12, 3);
+  unsigned long hours = uptime / 3600;
+  unsigned long minutes = (uptime % 3600) / 60;
+  
+  lcd.print(hours);
+  lcd.print("h");
+  if (minutes < 10) lcd.print("0");
+  lcd.print(minutes);
 }

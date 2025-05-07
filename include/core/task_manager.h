@@ -18,46 +18,45 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
-#include "../include/config.h"
-#include "../hardware/io/ui_manager.h"
-#include "../communication/wifi_manager.h"
 
-// Types de messages
-enum MessageType {
-    MSG_NONE = 0,
-    MSG_DISPLAY_UPDATE,
-    MSG_TOUCH_EVENT,
-    MSG_WIFI_STATUS,
-    MSG_SYSTEM_STATUS,
-    MSG_ERROR,
-    MSG_TASK_LIST
-};
+// Déclarations anticipées
+class UIManager;
+class WiFiManager;
 
-// Structure des messages
+// Nombre maximum de tâches
+#define MAX_TASKS 10
+
+// Structure pour les métriques des tâches
 typedef struct {
-    uint8_t type;
-    uint16_t value;
-    String message;
-} TaskMessage;
+    uint32_t cpuUsage;
+    uint32_t stackHighWaterMark;
+    uint32_t lastRunTime;
+} TaskStat;
 
+// Structure pour les paramètres de tâches
+typedef struct {
+    int taskIndex;
+    void* manager;
+    uint32_t period;
+    bool isRealtime;
+} TaskParams;
+
+// Structure pour la configuration des tâches
+typedef struct {
+    const char* name;
+    TaskFunction_t function;
+    uint32_t stackSize;
+    UBaseType_t priority;
+    BaseType_t core;
+    uint32_t period;
+    bool isRealtime;
+} TaskConfig;
+
+/**
+ * Gestionnaire de tâches multiples
+ * Permet de gérer et surveiller les tâches FreeRTOS
+ */
 class TaskManager {
-public:
-    TaskManager();
-    ~TaskManager();
-    
-    // Initialisation
-    void begin(UIManager* ui, WiFiManager* wifi);
-    
-    // Gestion des tâches
-    void startTasks();
-    void stopTasks();
-    
-    // Communication
-    static bool sendMessage(MessageType type, uint16_t value, const char* message);
-    
-    // État
-    bool isRunning() const;
-    
 private:
     // Handles des tâches
     TaskHandle_t displayTaskHandle;
@@ -65,25 +64,48 @@ private:
     TaskHandle_t wifiMonitorTaskHandle;
     TaskHandle_t systemMonitorTaskHandle;
     
-    // File d'attente et mutex
+    // Variables d'état
+    bool running;
+    bool tasksRunning;
+    unsigned long lastTaskMetricsTime;
+    
+    // Handles et statistiques des tâches
+    TaskHandle_t taskHandles[MAX_TASKS];
+    TaskParams* taskParams[MAX_TASKS];
+    TaskStat taskStats[MAX_TASKS];
+    
+    // Ressources partagées
     static QueueHandle_t messageQueue;
     static SemaphoreHandle_t displayMutex;
-    
-    // Références aux gestionnaires
     static UIManager* uiManager;
     static WiFiManager* wifiManager;
     
-    // État
-    bool running;
+    // Fonctions de tâches
+    static void displayTask(void* parameters);
+    static void buttonTask(void* parameters);
+    static void networkTask(void* parameters);
+    static void controlTask(void* parameters);
+    static void inputTask(void* parameters);
+    static void monitorTask(void* parameters);
+    static void sensorTask(void* parameters);
     
-    // Tâches FreeRTOS
-    static void displayTask(void* parameter);
-    static void buttonTask(void* parameter);
-    static void wifiMonitorTask(void* parameter);
-    static void systemMonitorTask(void* parameter);
+public:
+    // Constructeur et destructeur
+    TaskManager();
+    ~TaskManager();
     
-    // Traitement des messages
-    static void processMessage(const TaskMessage& msg);
+    // Initialisation et démarrage
+    bool begin(UIManager* ui, WiFiManager* wifi);
+    bool startTasks();
+    void stopTasks();
+    void stopAllTasks();
+    
+    // Surveillance des tâches
+    void updateTaskMetrics();
+    bool checkTasksHealth();
+    
+    // Getters
+    bool isRunning() const { return running; }
 };
 
 #endif // TASK_MANAGER_H

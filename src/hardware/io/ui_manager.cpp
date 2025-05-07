@@ -59,40 +59,55 @@ UIManager::~UIManager() {
     // Nettoyage si nécessaire
 }
 
+/**
+ * Initialise l'UIManager
+ * @return true si l'initialisation réussit, false sinon
+ */
 bool UIManager::begin() {
-    // Configuration I2C
-    Wire.begin(I2C_SDA, I2C_SCL);
-    delay(50);
+    // Initialiser le LCD via DisplayManager
+    bool lcdInitialized = display.isInitialized();
     
-    LOG_INFO("UI", "Initialisation de l'interface LCD...");
-    
-    // Initialisation LCD avec plusieurs tentatives
-    for (int attempt = 1; attempt <= MAX_INIT_ATTEMPTS; attempt++) {
-        LOG_INFO("UI", "Tentative %d/%d", attempt, MAX_INIT_ATTEMPTS);
-        
-        lcd.init();
-        lcd.backlight();
-        lcd.clear();
-        
-        lcd.setCursor(0, 0);
-        lcd.print("Test LCD");
-        
-        lcdInitialized = true;
-        createCustomChars();
-        
-        // Configuration des boutons
-        pinMode(BUTTON_BACK_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
-        pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
-        
-        LOG_INFO("UI", "Interface initialisée avec succès!");
-        return true;
+    if (!lcdInitialized) {
+        // Si l'écran n'est pas déjà initialisé, essayer de l'initialiser
+        display.setupI2C();
+        lcdInitialized = display.initLCD();
+        if (lcdInitialized) {
+            display.createCustomChars();
+        }
     }
     
-    LOG_ERROR("UI", "Échec de l'initialisation de l'interface");
-    lcdInitialized = false;
-    return false;
+    // Configurer les entrées pour les boutons (utiliser INPUT_PULLUP pour éviter les résistances externes)
+    pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_BACK_PIN, INPUT_PULLUP);
+    
+    // Initialiser les variables d'état
+    currentDisplayState = DISPLAY_MAIN;
+    currentMenu = MENU_MAIN;
+    currentMenuSelection = 0;
+    lastButtonCheckTime = 0;
+    lastDisplayUpdate = 0;
+    displayNeedsUpdate = true;  // Forcer une mise à jour initiale
+    
+    // Initialiser le tableau des états des boutons
+    for (int i = 0; i < MAX_BUTTONS; i++) {
+        buttonStates[i] = HIGH;  // HIGH = non pressé avec INPUT_PULLUP
+        lastButtonStates[i] = HIGH;
+        lastDebounceTime[i] = 0;
+    }
+    
+    if (lcdInitialized) {
+        // Afficher un écran de bienvenue initial
+        display.displayWelcomeScreen(true);
+        delay(1000);  // Court délai pour afficher l'écran d'accueil
+        updateDisplay();  // Afficher l'écran principal
+        LOG_INFO("UI", "Interface utilisateur initialisée avec succès");
+    } else {
+        LOG_ERROR("UI", "Échec d'initialisation de l'interface utilisateur - écran LCD non fonctionnel");
+    }
+    
+    return lcdInitialized;
 }
 
 void UIManager::createCustomChars() {
@@ -591,7 +606,30 @@ void UIManager::checkDisplayStatus() {
     
     lastDisplayCheck = currentTime;
     
-    if (!lcdInitialized) {
-        begin();
+    // Vérifier d'abord si l'écran LCD répond via DisplayManager
+    if (!display.isInitialized()) {
+        LOG_WARNING("UI", "Écran LCD non initialisé, tentative de récupération");
+        display.checkAndRecover();
+        
+        // Mettre à jour l'état d'initialisation de l'UIManager
+        lcdInitialized = display.isInitialized();
+        
+        // Si l'écran est maintenant fonctionnel, forcer une mise à jour de l'affichage
+        if (lcdInitialized) {
+            displayNeedsUpdate = true;
+            LOG_INFO("UI", "Écran LCD récupéré avec succès");
+        }
+    } else {
+        // Même si l'écran est initialisé, vérifier périodiquement sa connexion
+        bool lcdOk = display.checkLCDConnection();
+        if (!lcdOk) {
+            // L'écran ne répond plus, tenter une récupération
+            LOG_WARNING("UI", "Écran LCD ne répond plus, tentative de récupération");
+            display.recoverLCD();
+            lcdInitialized = display.isInitialized();
+            if (lcdInitialized) {
+                displayNeedsUpdate = true;
+            }
+        }
     }
 }

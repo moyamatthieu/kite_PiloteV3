@@ -103,4 +103,11 @@ bool imuSleep();
  */
 bool imuWake();
 
+/**
+ * Mise à jour périodique des données de l'IMU
+ * Fonction thread-safe compatible avec FreeRTOS
+ * @return true si succès, false si échec
+ */
+bool updateIMU();
+
 #endif // IMU_H

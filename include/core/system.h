@@ -15,34 +15,36 @@
 
 #include <Arduino.h>
 #include "config.h"
+#include "../hardware/actuators/servo.h"  // Ajout pour accéder aux fonctions servo
 
 // === CONSTANTES ===
 
 // États système
-#define SYS_STATE_INIT            0
-#define SYS_STATE_READY           1
-#define SYS_STATE_RUNNING         2
-#define SYS_STATE_ERROR           3
-#define SYS_STATE_POWER_SAVE      4
-#define SYS_STATE_UPDATE          5
-#define SYS_STATE_CALIBRATION     6
+#define SYS_STATE_INIT            0  // Initialisation
+#define SYS_STATE_READY           1  // Prêt
+#define SYS_STATE_RUNNING         2  // En cours d'exécution
+#define SYS_STATE_ERROR           3  // Erreur
+#define SYS_STATE_POWER_SAVE      4  // Économie d'énergie
+#define SYS_STATE_UPDATE          5  // Mise à jour
+#define SYS_STATE_CALIBRATION     6  // Calibration
+#define SYS_STATE_MAINTENANCE     7  // Maintenance
 
 // Codes d'erreur système
-#define SYS_OK                    0    // Pas d'erreur
-#define SYS_ALREADY_INITIALIZED   1    // Système déjà initialisé
-#define SYS_INIT_FAILED           2    // Échec d'initialisation
-#define SYS_OUT_OF_MEMORY         3    // Mémoire insuffisante
-#define SYS_TIMEOUT               4    // Délai dépassé
-#define SYS_NOT_INITIALIZED       5    // Système non initialisé
-#define SYS_HARDWARE_ERROR        6    // Erreur matérielle
+typedef enum {
+  SYS_OK = 0,               // Pas d'erreur
+  SYS_ALREADY_INITIALIZED,  // Système déjà initialisé
+  SYS_INIT_FAILED,          // Échec d'initialisation
+  SYS_OUT_OF_MEMORY,        // Mémoire insuffisante
+  SYS_TIMEOUT,              // Timeout
+  SYS_NOT_INITIALIZED,      // Système non initialisé
+  SYS_HARDWARE_ERROR,       // Erreur matérielle
+  SYS_LAST_ERROR_CODE       // Marqueur pour le dernier code d'erreur
+} SystemErrorCode;
 
 // Configuration du watchdog
-#define WDT_TIMEOUT_SECONDS       5    // Timeout du watchdog en secondes
+#define WDT_TIMEOUT_SECONDS       10  // Timeout du watchdog en secondes
 
 // === TYPES DE DONNÉES ===
-
-// Type pour les codes d'erreur système
-typedef int SystemErrorCode;
 
 // Structure pour les informations système
 typedef struct {
@@ -74,6 +76,9 @@ void systemRestart(unsigned long delayMs = 0);
 
 // Vérifier la santé du système
 bool systemHealthCheck();
+
+// Vérifier l'état du matériel
+bool systemCheckHardware();  // Fonction ajoutée pour vérifier l'état du matériel
 
 // Entrer en mode économie d'énergie
 void enterPowerSaveMode();

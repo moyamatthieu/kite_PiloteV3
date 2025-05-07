@@ -1,50 +1,28 @@
-#pragma once
+#ifndef SERVO_H
+#define SERVO_H
 
 #include <Arduino.h>
 #include <ESP32Servo.h>
-#include "../../core/config.h" // Inclure config.h pour les définitions de broches
+#include "../../core/config.h"
 
-// Limites d'angle pour les servomoteurs
-#define DIRECTION_MIN_ANGLE -90
-#define DIRECTION_MAX_ANGLE 90
-#define TRIM_MIN_ANGLE -45
-#define TRIM_MAX_ANGLE 45
+// Constantes pour les limites d'angle des servomoteurs
+#define DIRECTION_MIN_ANGLE -90   // Angle minimum de direction (degrés)
+#define DIRECTION_MAX_ANGLE 90    // Angle maximum de direction (degrés)
+#define TRIM_MIN_ANGLE -45        // Angle minimum de trim (degrés)
+#define TRIM_MAX_ANGLE 45         // Angle maximum de trim (degrés)
 
-/**
- * Initialise tous les servomoteurs
- * @return true si l'initialisation réussit, false sinon
- */
+// Constantes pour l'optimisation des performances servomoteurs
+#define SERVO_FREQUENCY 50        // Fréquence PWM en Hz
+#define SERVO_UPDATE_INTERVAL 20  // Intervalle minimum entre les mises à jour (ms)
+
+// Fonctions d'initialisation et de contrôle
 bool servoInitAll();
-
-/**
- * Déplace le servomoteur de direction
- * @param angle Angle de direction (-90 à +90)
- * @return true si le mouvement réussit, false sinon
- */
+bool servoReinitialize();
+bool servoUpdateAll(int direction, int trim, int lineModulation);  // Nouvelle fonction de mise à jour optimisée
 bool servoSetDirection(int angle);
-
-/**
- * Déplace le servomoteur de trim
- * @param angle Angle de trim (-45 à +45)
- * @return true si le mouvement réussit, false sinon
- */
 bool servoSetTrim(int angle);
-
-/**
- * Contrôle le servomoteur de modulation de ligne
- * @param position Position du servomoteur (0 à 100)
- * @return true si le mouvement réussit, false sinon
- */
 bool servoSetLineModulation(int position);
-
-/**
- * Détache tous les servomoteurs pour économiser de l'énergie
- */
 void servoDetachAll();
-
-/**
- * Vérifie si un servomoteur est fixé
- * @param servoIndex Index du servomoteur (0=direction, 1=trim, 2=linemod)
- * @return true si le servomoteur est fixé, false sinon
- */
 bool servoIsAttached(uint8_t servoIndex);
+
+#endif // SERVO_H

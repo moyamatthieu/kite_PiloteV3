@@ -94,7 +94,15 @@
     },
     { "type": "wokwi-stepper-motor", "id": "stepper1", "top": -504.29, "left": 0.88, "attrs": {} },
     { "type": "wokwi-vcc", "id": "vcc1", "top": -287.24, "left": -460.8, "attrs": {} },
-    { "type": "wokwi-gnd", "id": "gnd1", "top": 28.8, "left": -471, "attrs": {} }
+    { "type": "wokwi-gnd", "id": "gnd1", "top": 28.8, "left": -471, "attrs": {} },
+    {
+      "type": "wokwi-mpu6050",
+      "id": "imu1",
+      "top": -150.62,
+      "left": 338.92,
+      "rotate": 270,
+      "attrs": {}
+    }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -145,7 +153,11 @@
     [ "stepper1:B-", "esp:23", "green", [ "v19.2", "h134.39", "v105.6" ] ],
     [ "stepper1:GND", "esp:GND.2", "black", [ "v99.2", "h270.8", "v241.7" ] ],
     [ "stepper1:VCC", "$serialMonitor:5V", "red", [ "v-100", "h100", "v252" ] ],
-    [ "gnd1:GND", "led1:C", "black", [ "v-9.6", "h38.4", "v163.2", "h671.6" ] ]
+    [ "gnd1:GND", "led1:C", "black", [ "v-9.6", "h38.4", "v163.2", "h671.6" ] ],
+    [ "vcc1:VCC", "imu1:VCC", "red", [ "v38.4", "h768", "v48" ] ],
+    [ "gnd1:GND", "imu1:GND", "black", [ "v-259.2", "h787.2", "v76.8" ] ],
+    [ "esp:21", "imu1:SDA", "green", [ "h86.4", "v-9.6" ] ],
+    [ "esp:22", "imu1:SCL", "green", [ "h0" ] ]
   ],
   "dependencies": {}
 }

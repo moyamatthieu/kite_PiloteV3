@@ -36,15 +36,15 @@
 #define LED_PIN           2        // Pin pour la LED indicatrice -> led1:A via r1
 
 // Pins pour les boutons de l'interface utilisateur (connexions dans diagram.json)
-#define BUTTON_UP_PIN       12       // Pin pour le bouton de navigation haut (vert) -> btn2:2.l
-#define BUTTON_DOWN_PIN     14       // Pin pour le bouton de navigation bas (jaune) -> btn3:2.l
-#define BUTTON_SELECT_PIN   26       // Pin pour le bouton de sélection (rouge) -> btn4:2.l
-#define BUTTON_BACK_PIN     27       // Pin pour le bouton de retour (bleu) -> btn1:2.l
+#define BUTTON_UP_PIN       25       // Pin pour le bouton de navigation haut (vert) -> btn2:2.l
+#define BUTTON_DOWN_PIN     26       // Pin pour le bouton de navigation bas (jaune) -> btn3:2.l
+#define BUTTON_SELECT_PIN   27       // Pin pour le bouton de sélection (rouge) -> btn4:2.l
+#define BUTTON_BACK_PIN     35       // Pin pour le bouton de retour (bleu) -> btn1:2.l
 
 // Pins pour les servomoteurs (connexions dans diagram.json)
-#define SERVO_DIRECTION_PIN 25       // Pin pour le servomoteur de direction -> servo2:PWM
-#define SERVO_TRIM_PIN      33       // Pin pour le servomoteur de trim -> servo1:PWM
-#define SERVO_LINEMOD_PIN   13       // Pin pour le servomoteur de modulation de ligne
+#define SERVO_DIRECTION_PIN 13       // Pin pour le servomoteur de direction -> servo2:PWM
+#define SERVO_TRIM_PIN      14       // Pin pour le servomoteur de trim -> servo1:PWM
+#define SERVO_LINEMOD_PIN   15       // Pin pour le servomoteur de modulation de ligne
 
 // Pins pour le moteur pas à pas (connexions dans diagram.json)
 #define STEPPER_IN1       5        // Pin IN1 du moteur pas à pas -> stepper1:A+
@@ -65,7 +65,7 @@
 #define WIFI_SSID         "Wokwi-GUEST"   // SSID du réseau WiFi
 #define WIFI_PASSWORD     ""              // Mot de passe WiFi (vide pour réseau ouvert)
 #define SERVER_PORT       80              // Port du serveur web
-#define WIFI_TIMEOUT_MS   20000           // Timeout pour la connexion WiFi (ms)
+#define WIFI_TIMEOUT_MS   10000           // Timeout pour la connexion WiFi (ms)
 
 // === CONFIGURATION INTERFACE ===
 
@@ -87,7 +87,7 @@
 // === CONFIGURATION SYSTÈME ===
 
 // Paramètres temporels
-#define DISPLAY_UPDATE_INTERVAL    150    // Intervalle entre les mises à jour d'affichage (ms)
+#define DISPLAY_UPDATE_INTERVAL    250    // Intervalle entre les mises à jour d'affichage (ms)
 #define MENU_SCROLL_INTERVAL       600    // Intervalle de défilement du menu (ms)
 #define DISPLAY_CHECK_INTERVAL    45000   // Intervalle pour vérifier l'état de l'écran (ms)
 #define SYSTEM_CHECK_INTERVAL     15000   // Intervalle pour les vérifications système (ms)
@@ -100,9 +100,12 @@
 #define STEPPER_UPDATE_INTERVAL   5       // Intervalle de mise à jour du moteur pas à pas (ms)
 #define DISPLAY_REFRESH_INTERVAL  200     // Intervalle de rafraîchissement de l'affichage (ms)
 
+// Configuration de l'affichage
+#define DISPLAY_UPDATE_THROTTLE    200    // Limite de mise à jour d'affichage (ms)
+
 // Configuration Servomoteurs
 #define SERVO_MIN_PULSE_WIDTH     500     // Largeur d'impulsion minimale (us)
-#define SERVO_MAX_PULSE_WIDTH     2400    // Largeur d'impulsion maximale (us)
+#define SERVO_MAX_PULSE_WIDTH     2500    // Largeur d'impulsion maximale (us)
 #define SERVO_MIN_ANGLE           0       // Angle minimum (degrés)
 #define SERVO_MAX_ANGLE           180     // Angle maximum (degrés)
 #define SERVO_FREQUENCY           50      // Fréquence PWM (Hz)
@@ -133,9 +136,9 @@
 // Taille des piles de tâches FreeRTOS (en mots)
 #define DISPLAY_TASK_STACK_SIZE   2048    // Réduit pour optimisation mémoire - LCD simple
 #define POT_TASK_STACK_SIZE       2048    // Tâche de lecture des potentiomètres
-#define MOTOR_TASK_STACK_SIZE     2048    // Tâche de contrôle des moteurs
+#define MOTOR_TASK_STACK_SIZE     3072    // Tâche de contrôle des moteurs
 #define WIFI_TASK_STACK_SIZE      4096    // Tâche WiFi
-#define SYSTEM_TASK_STACK_SIZE    3072    // Réduit pour optimisation mémoire
+#define SYSTEM_TASK_STACK_SIZE    2048    // Réduit pour optimisation mémoire
 
 // Configuration mémoire
 #ifndef MEMORY_OPTIMIZATION_ENABLED

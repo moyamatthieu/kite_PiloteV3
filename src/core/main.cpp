@@ -414,44 +414,13 @@ void setup() {
 
 /**
  * Boucle principale exécutée en continu
- * Gère les mises à jour OTA et surveille l'état du système
+ * Gère les mises à jour OTA et la coordination des différentes fonctionnalités
  */
 void loop() {
-  unsigned long now = millis();
-  // Vérification système périodique
-  if (now - lastSystemStateLogTime >= SYSTEM_STATE_LOG_INTERVAL_MS) {
-    checkSystemState();
-    lastSystemStateLogTime = now;
-  }
-  // Journalisation mémoire périodique
-  if (now - lastMemoryLogTime >= MEMORY_LOG_INTERVAL_MS) {
-    logMemoryUsage("MAIN");
-    lastMemoryLogTime = now;
-  }
-  // Nourrir les watchdogs
+  // Boucle principale allégée : tout le métier est géré par FreeRTOS
+  // On ne garde que l'alimentation du watchdog et la gestion OTA
   feedWatchdogs();
-  // Gestion des mises à jour OTA
   ElegantOTA.loop();
-  // Lecture des potentiomètres et pilotage des servomoteurs
-  if (potManager.updatePotentiometers()) {
-    // Lien direct : potentiomètre -> servo (sans mapping)
-    servoSetDirection(potManager.getDirection());
-    servoSetTrim(potManager.getTrim());
-    servoSetLineModulation(potManager.getLineLength());
-  }
-  // Affichage dynamique toutes les 200ms ou si changement
-  if (now - lastDisplayUpdate > 200) {
-    int dir = potManager.getDirection();
-    int trim = potManager.getTrim();
-    int len = potManager.getLineLength();
-    bool wifi = (WiFi.status() == WL_CONNECTED);
-    unsigned long uptime = now / 1000;
-    if (dir != lastDir || trim != lastTrim || len != lastLen || wifi != lastWifi || uptime != lastUptime) {
-      display.displayLiveStatus(dir, trim, len, wifi, uptime);
-      lastDir = dir; lastTrim = trim; lastLen = len; lastWifi = wifi; lastUptime = uptime;
-      lastDisplayUpdate = now;
-    }
-  }
-  // Court délai
+  // Petite pause pour céder le CPU (optionnel)
   delay(10);
 }

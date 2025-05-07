@@ -157,8 +157,8 @@ static void restartTask(void* parameters) {
   vTaskDelete(NULL);
 }
 
-const char* systemErrorToString(int code) {
-  switch ((SystemErrorCode)code) {
+const char* systemErrorToString(SystemErrorCode code) {
+  switch (code) {
     case SYS_OK:
       return "Pas d'erreur";
     case SYS_ALREADY_INITIALIZED:
@@ -203,6 +203,40 @@ bool systemHealthCheck() {
   }
   
   return true;
+}
+
+/**
+ * Vérification périodique de l'état du matériel et tentative de récupération
+ * @return true si tout est correct ou a été récupéré, false sinon
+ */
+bool systemCheckHardware() {
+  bool allOk = true;
+  static unsigned long lastServoCheckTime = 0;
+  const unsigned long servoCheckInterval = 10000; // 10 secondes entre les vérifications
+  unsigned long currentTime = millis();
+  
+  // Vérifier l'état des servomoteurs périodiquement
+  if (currentTime - lastServoCheckTime > servoCheckInterval) {
+    lastServoCheckTime = currentTime;
+    
+    // Vérifier si les servomoteurs sont correctement initialisés
+    if (!servoIsAttached(0) || !servoIsAttached(1) || !servoIsAttached(2)) {
+      // Les servomoteurs ne sont pas correctement initialisés, tenter une réinitialisation
+      LOG_WARNING("SYS", "Servomoteurs non initialisés, tentative de récupération...");
+      
+      bool servoRecovered = servoReinitialize();
+      if (servoRecovered) {
+        LOG_INFO("SYS", "Servomoteurs récupérés avec succès");
+      } else {
+        LOG_ERROR("SYS", "Échec de récupération des servomoteurs");
+        allOk = false;
+      }
+    }
+  }
+  
+  // Ajouter ici d'autres vérifications matérielles si nécessaire
+  
+  return allOk;
 }
 
 void enterPowerSaveMode() {
