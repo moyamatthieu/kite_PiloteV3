@@ -4,6 +4,12 @@
 #include "hardware/io/display_manager.h"
 #include "../../core/config.h" // Inclure config.h pour les définitions de broches
 
+// Define button constants to resolve undefined identifier errors
+#define BUTTON_UP 0
+#define BUTTON_DOWN 1
+#define BUTTON_SELECT 2
+#define BUTTON_BACK 3
+
 /**
  * Classe de gestion des boutons de l'interface utilisateur
  * Gère les interactions avec les boutons physiques et les événements associés
@@ -34,6 +40,9 @@ public:
     
     // Gestion des événements longs
     bool isLongPress(uint8_t buttonPin);
+
+    // Lecture de l'état d'un bouton avec debouncing
+    bool readButton(uint8_t pin);
     
 private:
     DisplayManager* displayManager;
@@ -45,7 +54,4 @@ private:
     
     // Configuration des broches
     void setupPins();
-    
-    // Lecture de l'état d'un bouton avec debouncing
-    bool readButton(uint8_t pin);
 };

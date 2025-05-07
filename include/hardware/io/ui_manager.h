@@ -20,6 +20,10 @@
 #include "../../core/config.h"
 #include "display_manager.h"
 
+#ifndef MAX_BUTTONS
+#define MAX_BUTTONS 3  // Nombre maximum de boutons
+#endif
+
 // Constantes pour la gestion de l'interface utilisateur
 // Utilisons les constantes existantes définies dans config.h
 // #define DISPLAY_UPDATE_INTERVAL 250   // Remplacé par la constante de config.h (150ms)

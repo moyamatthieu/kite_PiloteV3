@@ -1,18 +1,33 @@
 /*
   -----------------------
-  Kite PiloteV3 - Module de gestion des tâches
+  Kite PiloteV3 - Module de Gestion des Tâches (Interface)
   -----------------------
   
-  Module de gestion des tâches multiples et parallèles pour le système Kite PiloteV3.
+  Interface du gestionnaire de tâches FreeRTOS pour le système Kite PiloteV3.
   
-  Version: 1.0.0
-  Date: 1 mai 2025
+  Version: 3.0.0
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
-*/
-
-/* === MODULE TASK MANAGER ===
-   Ce module gère les tâches FreeRTOS, y compris leur création, surveillance,
-   et arrêt. Il permet une gestion centralisée des tâches du système.
+  
+  ===== INTERFACE PUBLIQUE =====
+  Ce fichier définit l'interface publique pour le gestionnaire de tâches qui
+  orchestre l'exécution des différentes fonctionnalités du système.
+  
+  Principales fonctionnalités exposées :
+  - TaskManager::begin() : Initialisation du gestionnaire et de ses ressources
+  - TaskManager::startTasks() : Création et démarrage des tâches
+  - TaskManager::stopTasks() : Arrêt des tâches
+  - TaskManager::checkTasksHealth() : Surveillance de l'état des tâches
+  
+  Interactions avec d'autres modules :
+  - UIManager : Gestion de l'interface utilisateur
+  - WiFiManager : Communication sans fil
+  - Tous les modules qui s'exécutent comme des tâches FreeRTOS
+  
+  Contraintes techniques :
+  - Les tâches ont des priorités différentes (1-24, 24 étant la plus élevée)
+  - Les tailles de pile doivent être définies avec soin selon les besoins de chaque tâche
+  - Les délais doivent utiliser vTaskDelayUntil plutôt que vTaskDelay pour une meilleure précision
 */
 
 #ifndef TASK_MANAGER_H
@@ -23,11 +38,20 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
-
-// === CONSTANTES ===
-#define MAX_TASKS 10  // Nombre maximum de tâches gérées
+#include "config.h"
+#include "hardware/io/ui_manager.h"
+#include "communication/wifi_manager.h"
 
 // === STRUCTURES ===
+
+// Structure pour les messages
+typedef struct {
+    uint8_t level;     // Niveau de log
+    char tag[16];      // Tag du message
+    char message[128]; // Contenu du message
+} Message;
+
+// Structure pour les métriques des tâches.
 
 /**
  * Structure pour les métriques des tâches.
@@ -62,14 +86,26 @@ typedef struct {
 } TaskConfig;
 
 /**
+ * Définition d'une tâche
+ */
+typedef struct {
+    const char* name;         // Nom de la tâche
+    TaskFunction_t taskFunction;  // Fonction associée à la tâche
+    uint32_t stackSize;       // Taille de la pile
+    UBaseType_t priority;     // Priorité de la tâche
+    TaskHandle_t handle;      // Handle de la tâche
+} TaskDefinition;
+
+// === CLASSE TASK MANAGER ===
+/**
  * Gestionnaire de tâches multiples
  * Permet de gérer et surveiller les tâches FreeRTOS
  */
 class TaskManager {
 private:
     // Handles des tâches
-    TaskHandle_t displayTaskHandle;      // Handle pour la tâche d'affichage
-    TaskHandle_t buttonTaskHandle;       // Handle pour la tâche des boutons
+    static TaskHandle_t displayTaskHandle;      // Handle pour la tâche d'affichage (rendu statique)
+    static TaskHandle_t buttonTaskHandle;       // Handle pour la tâche des boutons (rendu statique)
     TaskHandle_t wifiMonitorTaskHandle;  // Handle pour la tâche de surveillance WiFi
     TaskHandle_t systemMonitorTaskHandle; // Handle pour la tâche de surveillance système
     

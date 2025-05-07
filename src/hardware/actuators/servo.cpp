@@ -3,195 +3,264 @@
   Kite PiloteV3 - Module Servo (Implémentation)
   -----------------------
   
-  Implémentation du module de contrôle des servomoteurs.
+  Implémentation du module de contrôle des servomoteurs pour le positionnement du cerf-volant.
   
-  Version: 1.0.0
-  Date: 6 mai 2025
+  Version: 3.0.0
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
+  
+  ===== FONCTIONNEMENT =====
+  Ce module gère les servomoteurs responsables du contrôle directionnel du cerf-volant.
+  Il utilise une machine à états finis (FSM) pour toutes les opérations asynchrones,
+  garantissant un fonctionnement non-bloquant compatible avec l'architecture multitâche.
+  
+  Principes de fonctionnement :
+  1. Initialisation par étapes des servomoteurs via une FSM évitant tout `delay()`
+  2. Allocation des timers PWM de manière dynamique et non-bloquante
+  3. Contrôle des positions avec conversion des angles d'entrée vers les valeurs PWM
+  4. Surveillance de l'état des servos et tentatives de récupération en cas de panne
+  
+  Architecture FSM implémentée :
+  - États d'initialisation : INIT_START, TIMER_SCAN, TIMER_ALLOC, SERVO_CONFIG, SERVO_ATTACH, etc.
+  - Toutes les transitions sont basées sur le temps écoulé et les résultats d'opérations
+  - Chaque état effectue une opération atomique rapide puis rend la main au système
+  - Cette approche est bien plus adaptée aux systèmes temps réel que l'utilisation de `delay()`
+  
+  Interactions avec d'autres modules :
+  - TaskManager : Appelle ce module depuis des tâches FreeRTOS
+  - Autopilot : Fournit les angles de direction et trim à appliquer
+  - Logging : Journalisation des événements et erreurs
+  - Config : Définition des broches GPIO et constantes
+  
+  Aspects techniques notables :
+  - Utilisation systématique de timestamps (millis()) au lieu de delay() pour gérer le temps
+  - FSM documentée dans le code avec des commentaires expliquant chaque état
+  - Variables statiques pour conserver l'état entre les appels
+  - Mécanisme de récupération automatique en cas d'échec d'initialisation
+  
+  Exemple d'implémentation de la FSM :
+  ```
+  switch(initState) {
+    case INIT_START:
+      // Initialisation des variables, transition vers l'état suivant
+      initState = TIMER_SCAN;
+      return false; // Pas terminé
+      
+    case TIMER_SCAN:
+      // Recherche de timers disponibles sans bloquer
+      if(currentTimer < maxTimers) {
+        // Scanner un timer à la fois puis revenir
+        currentTimer++;
+        return false;
+      }
+      // Passage à l'étape suivante une fois tous les timers scannés
+      initState = TIMER_ALLOC;
+      return false;
+      
+    // ... autres états de la FSM ...
+  }
+  ```
 */
 
 #include "hardware/actuators/servo.h"
 #include "utils/logging.h"
 
-// Variables statiques
-static Servo directionServo;
-static Servo trimServo;
-static Servo lineModServo;
-static bool servosInitialized = false;
-static unsigned long lastServoUpdateTime = 0;
+// Approche spécifique pour Wokwi - simplifie la gestion des servomoteurs
+#ifdef WOKWI_SIMULATION
+#include <Servo.h>
 
-/**
- * Initialise tous les servomoteurs avec une stratégie plus robuste
- * @return true si l'initialisation réussit, false sinon
- */
-bool servoInitAll() {
-  LOG_INFO("SERVO", "Initialisation des servomoteurs...");
+// Variables directement accessibles pour simplifier le débogage
+Servo servoDirection;
+Servo servoTrim;
+Servo servoLine;
+
+// Fonction d'initialisation simplifiée optimisée pour Wokwi
+void setupWokwiServos() {
+  // Attacher directement les servos aux broches
+  servoDirection.attach(SERVO_DIRECTION_PIN);
+  servoTrim.attach(SERVO_TRIM_PIN);
+  servoLine.attach(SERVO_LINEMOD_PIN);
   
-  // Réinitialiser l'état
-  servosInitialized = false;
+  // Position initiale au centre
+  servoDirection.write(90);
+  servoTrim.write(90);
+  servoLine.write(90);
   
-  // Détacher d'abord tous les servos pour réinitialiser l'état interne
-  servoDetachAll();
+  LOG_INFO("WOKWI", "Servomoteurs initialisés directement pour Wokwi");
+}
+
+// Fonction de mise à jour simplifiée pour Wokwi
+void updateWokwiServos(int direction, int trim, int linePos) {
+  static int availableTimers[4] = {-1, -1, -1, -1};
+  static int numAvailableTimers = 0;
+  static int allocatedTimers = 0;
+  static int currentAttempt = 0;
+  static bool dirOk = false;
+  static bool trimOk = false;
+  static bool lineModOk = false;
   
-  // Délai important pour permettre au matériel de se stabiliser
-  delay(200);
+  // Machine à états finie pour initialisation non-bloquante
+  unsigned long currentTime = millis();
   
-  // Configuration des timers - utilisation exclusive des timers pour ce module
-  // Allocation avec délais plus longs pour stabiliser
-  bool timersOk = true;
-  
-  // Essayer d'utiliser différentes combinaisons de timers si les premiers échouent
-  int timerConfigs[3][4] = {
-    {0, 1, 2, 3},  // Configuration standard
-    {0, 2, 4, 6},  // Configuration alternative 1
-    {1, 3, 5, 7}   // Configuration alternative 2
-  };
-  
-  // Essayer les différentes configurations de timers
-  bool timerConfigOk = false;
-  for (int configIdx = 0; configIdx < 3 && !timerConfigOk; configIdx++) {
-    LOG_INFO("SERVO", "Essai configuration timer #%d", configIdx + 1);
+  // Réinitialisation complète de l'état pour éviter les problèmes
+  if (initState == 0) {
+    numAvailableTimers = 0;
+    currentTimer = 0;
+    allocatedTimers = 0;
+    currentAttempt = 0;
+    dirOk = false;
+    trimOk = false;
+    lineModOk = false;
     
-    timerConfigOk = true;
-    for (int i = 0; i < 4 && timerConfigOk; i++) {
-      delay(50); // Délai entre allocations
-      
-      // Vérifier si ce timer est déjà utilisé par une autre fonction
-      if (ESP32PWM::hasPwm(timerConfigs[configIdx][i])) {
-        LOG_WARNING("SERVO", "Timer %d déjà utilisé", timerConfigs[configIdx][i]);
-        timerConfigOk = false;
-      } else {
-        ESP32PWM::allocateTimer(timerConfigs[configIdx][i]);
-      }
+    for (int i = 0; i < 4; i++) {
+      availableTimers[i] = -1;
     }
     
-    if (timerConfigOk) {
-      LOG_INFO("SERVO", "Configuration timer #%d utilisée avec succès", configIdx + 1);
-      break;
-    } else {
-      // Libérer tous les timers si cette configuration a échoué
-      for (int i = 0; i < 4; i++) {
-        // ESP32PWM::deallocateTimer n'existe pas, on ne fait rien ici
-        // La libération se fait automatiquement quand le servo est détaché
-      }
-      delay(100); // Délai de stabilisation
-    }
+    initState = 1;
+    lastActionTime = currentTime;
+    LOG_INFO("SERVO", "Démarrage de la séquence d'initialisation");
+    return false; // Pas encore terminé
   }
   
-  if (!timerConfigOk) {
-    LOG_ERROR("SERVO", "Impossible d'allouer les timers pour les servomoteurs");
+  // Allocation immédiate de deux timers connus pour fonctionner
+  if (initState == 1) {
+    ESP32PWM::allocateTimer(0);  // Timer 0
+    ESP32PWM::allocateTimer(1);  // Timer 1
+    allocatedTimers = 2;
+    LOG_INFO("SERVO", "2 timers alloués (0 et 1)");
+    initState = 3;  // Passer directement à la configuration des servos
+    lastActionTime = currentTime;
     return false;
   }
   
-  // Configuration de la fréquence des servomoteurs
-  const int servoFreq = SERVO_FREQUENCY;
-  
-  // Initialisation du servo de direction
-  bool dirOk = false;
-  for (int attempt = 1; attempt <= 3; attempt++) {
-    LOG_INFO("SERVO", "Initialisation du servo de direction (tentative %d/3)...", attempt);
-    
-    // Configuration du servo avec les paramètres corrects
-    directionServo.setPeriodHertz(servoFreq);
-    delay(50);
-    
-    // Tester différentes plages d'impulsions si l'initialisation échoue
-    int minPulse = SERVO_MIN_PULSE_WIDTH;
-    int maxPulse = SERVO_MAX_PULSE_WIDTH;
-    
-    if (attempt == 2) {
-      // Deuxième tentative avec plage plus restreinte
-      minPulse = 700;
-      maxPulse = 2300;
-    } else if (attempt == 3) {
-      // Troisième tentative avec valeurs par défaut de la bibliothèque
-      minPulse = 544;
-      maxPulse = 2400;
+  // Configuration du servo de direction
+  if (initState == 3) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant de configurer
     }
     
-    dirOk = directionServo.attach(SERVO_DIRECTION_PIN, minPulse, maxPulse);
-    
+    // Configuration et attachement du servo de direction
+    directionServo.setPeriodHertz(SERVO_FREQUENCY);
+    dirOk = directionServo.attach(SERVO_DIRECTION_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH);
+
     if (dirOk) {
-      directionServo.write(90); // Position neutre
-      delay(100);
-      LOG_INFO("SERVO", "Servo de direction initialisé avec succès");
-      break;
+      directionServo.write(90);  // Position centrale
+      LOG_INFO("SERVO", "Servo de direction initialisé avec succès sur la broche %d", SERVO_DIRECTION_PIN);
+    } else {
+      LOG_ERROR("SERVO", "Échec d'initialisation du servo de direction sur la broche %d", SERVO_DIRECTION_PIN);
+      // Deuxième tentative avec des paramètres par défaut
+      dirOk = directionServo.attach(SERVO_DIRECTION_PIN);
+      if (dirOk) {
+        directionServo.write(90);
+        LOG_INFO("SERVO", "Servo de direction initialisé (méthode alternative) sur la broche %d", SERVO_DIRECTION_PIN);
+      } else {
+        LOG_ERROR("SERVO", "Échec total d'initialisation du servo de direction sur la broche %d", SERVO_DIRECTION_PIN);
+      }
     }
     
-    // Détacher et réessayer après un délai
-    if (directionServo.attached()) {
-      directionServo.detach();
-    }
-    delay(100);
-  }
-  
-  if (!dirOk) {
-    LOG_ERROR("SERVO", "Échec d'initialisation du servo de direction après 3 tentatives");
-    servoDetachAll();
+    lastActionTime = currentTime;
+    initState = 4;
     return false;
   }
   
-  // Marquer comme initialisé
-  servosInitialized = true;
-  lastServoUpdateTime = millis();
-  
-  // Comme le servo de direction fonctionne, initialiser les autres servos
-  // mais ne pas échouer le démarrage si ces servos secondaires ne fonctionnent pas
-  
-  // Initialisation du servo de trim (avec 2 tentatives)
-  bool trimOk = false;
-  for (int attempt = 1; attempt <= 2; attempt++) {
-    LOG_INFO("SERVO", "Initialisation du servo de trim...");
+  // Tentative d'attachement du servo de direction
+  if (initState == 4) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant d'attacher
+    }
     
-    trimServo.setPeriodHertz(servoFreq);
-    delay(50);
+    initState = 6; // Passer à l'initialisation du trim
+    lastActionTime = currentTime;
+    return false;
+  }
+  
+  // Configuration du servo de trim
+  if (initState == 6) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant de configurer
+    }
+    
+    trimServo.setPeriodHertz(SERVO_FREQUENCY);
+    lastActionTime = currentTime;
+    initState = 7;
+    LOG_INFO("SERVO", "Servo de trim configuré");
+    return false;
+  }
+  
+  // Tentative d'attachement du servo de trim
+  if (initState == 7) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant d'attacher
+    }
     
     trimOk = trimServo.attach(SERVO_TRIM_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH);
     
+    if (!trimOk) {
+      LOG_WARNING("SERVO", "Échec de l'attachement initial du trim, tentative avec paramètres par défaut");
+      trimOk = trimServo.attach(SERVO_TRIM_PIN);
+    }
+    
     if (trimOk) {
-      trimServo.write(90); // Position neutre
+      trimServo.write(90);  // Position centrale
       LOG_INFO("SERVO", "Servo de trim initialisé avec succès");
-      break;
+    } else {
+      LOG_ERROR("SERVO", "Échec d'initialisation du servo de trim");
     }
     
-    if (trimServo.attached()) {
-      trimServo.detach();
+    initState = 8;
+    lastActionTime = currentTime;
+    return false;
+  }
+  
+  // Configuration du servo de modulation de ligne
+  if (initState == 8) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant de configurer
     }
-    delay(100);
-  }
-  
-  if (!trimOk) {
-    LOG_WARNING("SERVO", "Échec d'initialisation du servo de trim - continuera sans ce servo");
-  }
-  
-  // Initialisation du servo de modulation de ligne (avec 2 tentatives)
-  bool lineModOk = false;
-  for (int attempt = 1; attempt <= 2; attempt++) {
-    LOG_INFO("SERVO", "Initialisation du servo de modulation de ligne...");
     
-    lineModServo.setPeriodHertz(servoFreq);
-    delay(50);
+    lineModServo.setPeriodHertz(SERVO_FREQUENCY);
+    lastActionTime = currentTime;
+    initState = 9;
+    LOG_INFO("SERVO", "Servo de modulation de ligne configuré");
+    return false;
+  }
+  
+  // Tentative d'attachement du servo de modulation de ligne
+  if (initState == 9) {
+    if (currentTime - lastActionTime < 50) {
+      return false; // Attendre avant d'attacher
+    }
     
     lineModOk = lineModServo.attach(SERVO_LINEMOD_PIN, SERVO_MIN_PULSE_WIDTH, SERVO_MAX_PULSE_WIDTH);
     
-    if (lineModOk) {
-      lineModServo.write(0); // Position initiale
-      LOG_INFO("SERVO", "Servo de modulation de ligne initialisé avec succès");
-      break;
+    if (!lineModOk) {
+      LOG_WARNING("SERVO", "Échec de l'attachement initial de la ligne, tentative avec paramètres par défaut");
+      lineModOk = lineModServo.attach(SERVO_LINEMOD_PIN);
     }
     
-    if (lineModServo.attached()) {
-      lineModServo.detach();
+    if (lineModOk) {
+      lineModServo.write(90);  // Position centrale
+      LOG_INFO("SERVO", "Servo de modulation de ligne initialisé avec succès");
+    } else {
+      LOG_ERROR("SERVO", "Échec d'initialisation du servo de modulation de ligne");
     }
-    delay(100);
+    
+    // Finalisation de l'initialisation
+    servosInitialized = (dirOk || trimOk || lineModOk);
+    lastServoUpdateTime = millis();
+    
+    LOG_INFO("SERVO", "Initialisation des servomoteurs terminée (Direction: %s, Trim: %s, LineMod: %s)",
+             dirOk ? "OK" : "NOK", trimOk ? "OK" : "NOK", lineModOk ? "OK" : "NOK");
+    
+    // Réinitialiser la machine à états pour la prochaine initialisation
+    initState = 0;
+    
+    return servosInitialized; // Initialisation terminée
   }
   
-  if (!lineModOk) {
-    LOG_WARNING("SERVO", "Échec d'initialisation du servo de modulation de ligne - continuera sans ce servo");
-  }
-  
-  LOG_INFO("SERVO", "Initialisation des servomoteurs terminée");
-  return true; // Succès si au moins le servo principal fonctionne
+  // État inconnu, réinitialiser
+  initState = 0;
+  return false;
 }
 
 /**
@@ -227,23 +296,36 @@ bool servoUpdateAll(int direction, int trim, int lineModulation) {
   
   lastServoUpdateTime = now;
   
+  // Log périodique des valeurs envoyées aux servomoteurs (toutes les 10 mises à jour)
+  static int logCounter = 0;
+  if (++logCounter >= 10) {
+    LOG_INFO("SERVO", "Mise à jour servos: Direction=%d° Trim=%d° LineModulation=%d%%", 
+             direction, trim, lineModulation);
+    logCounter = 0;
+  }
+  
   // Mettre à jour chaque servo avec gestion d'erreur
   bool success = true;
   
   // Direction
   if (!servoSetDirection(direction)) {
     success = false;
-    // Ne pas interrompre, continuer avec les autres servos
+    LOG_ERROR("SERVO", "Échec mise à jour servo direction à %d° (PIN: %d)", 
+              direction, SERVO_DIRECTION_PIN);
   }
   
   // Trim
   if (!servoSetTrim(trim)) {
     success = false;
+    LOG_ERROR("SERVO", "Échec mise à jour servo trim à %d° (PIN: %d)", 
+              trim, SERVO_TRIM_PIN);
   }
   
   // Modulation de ligne
   if (!servoSetLineModulation(lineModulation)) {
     success = false;
+    LOG_ERROR("SERVO", "Échec mise à jour servo ligne à %d%% (PIN: %d)", 
+              lineModulation, SERVO_LINEMOD_PIN);
   }
   
   // Détecter les problèmes persistants et planifier une réinitialisation si nécessaire

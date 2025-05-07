@@ -1,21 +1,5 @@
 /*
   -----------------------
-  Kite PiloteV3 - Template de Fichier
-  -----------------------
-
-  Objectif : Décrire les objectifs et les choix d'architecture pour ce fichier.
-  
-  Instructions :
-  - Ajouter des commentaires pour expliquer les sections importantes.
-  - Respecter les conventions de codage définies dans le projet.
-  - Documenter les fonctions et les classes pour faciliter la maintenance.
-
-  Date : 6 mai 2025
-  Auteur : Équipe Kite PiloteV3
-*/
-
-/*
-  -----------------------
   Kite PiloteV3 - Programme principal
   -----------------------
   
@@ -23,8 +7,29 @@
   Architecture modulaire optimisée pour ESP32.
   
   Version: 3.0.0
-  Date: 2 mai 2025
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
+  
+  ===== FONCTIONNEMENT =====
+  Ce fichier implémente le programme principal du système Kite PiloteV3 qui contrôle
+  un cerf-volant générateur d'électricité. Son architecture est basée sur FreeRTOS
+  pour une gestion efficace des tâches parallèles.
+  
+  Le fonctionnement se décompose en plusieurs étapes :
+  1. Initialisation du système (GPIO, écran LCD, capteurs, servomoteurs)
+  2. Configuration du réseau WiFi et du serveur web
+  3. Démarrage des tâches FreeRTOS pour contrôler les différents sous-systèmes
+  4. Maintien du système en exécution via la boucle principale
+  
+  Lors de l'exécution :
+  - Le gestionnaire de tâches orchestre l'exécution des différentes fonctionnalités
+  - L'interface web permet le contrôle à distance du système
+  - Les capteurs fournissent des données en temps réel sur l'état du cerf-volant
+  - Les actionneurs ajustent la position du cerf-volant selon les commandes
+  - L'écran LCD affiche les informations essentielles
+  
+  Le système supporte la mise à jour Over-The-Air (OTA) pour faciliter les mises à jour
+  sans avoir à connecter physiquement l'appareil.
 */
 
 // === INCLUSIONS DES BIBLIOTHÈQUES EXTERNES ===
@@ -36,9 +41,9 @@
 #include <FastAccelStepper.h>    // Bibliothèque pour le moteur pas à pas
 
 // === INCLUSIONS DES MODULES CENTRAUX DU PROJET ===
+#include "core/logging.h"        // Fonctions et macros de journalisation
 #include "core/config.h"         // Constantes de configuration globale (pins, timings)
 #include "core/system.h"         // Gestion de l'état système et watchdog
-#include "core/logging.h"        // Fonctions et macros de journalisation
 #include "core/task_manager.h"   // Orchestration des tâches FreeRTOS
 
 // === INCLUSIONS MODULES HARDWARE ===
@@ -93,12 +98,6 @@ static unsigned long lastSystemStateLogTime = 0;
 static unsigned long lastMemoryLogTime = 0;
 static const unsigned long SYSTEM_STATE_LOG_INTERVAL_MS = 1000; // 1s
 static const unsigned long MEMORY_LOG_INTERVAL_MS = 2000;       // 2s
-
-// Ajout pour affichage dynamique
-static unsigned long lastDisplayUpdate = 0;
-static int lastDir = 0, lastTrim = 0, lastLen = 0;
-static bool lastWifi = false;
-static unsigned long lastUptime = 0;
 
 // === DÉCLARATION DES FONCTIONS ===
 
@@ -370,20 +369,21 @@ void checkSystemState() {
  */
 void setup() {
   // Initialisation du port série et du système de logs
-  #if defined(LOG_LEVEL)
-    logInit((LogLevel)LOG_LEVEL, 115200);
-  #else
-    logInit(LOG_INFO, 115200);  // Niveau INFO par défaut si non spécifié
-  #endif
+  logInit((LogLevel)LOG_LEVEL_INFO, 115200);
 
-  LOG_INFO("INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
+  logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
 
   // Initialisation du système et du watchdog
   SystemErrorCode result = systemInit();
   if (result != SYS_OK) {
-    LOG_ERROR("SYS", "Échec init système : %s", systemErrorToString(result));
+    logPrint((LogLevel)LOG_LEVEL_ERROR, "SYS", "Échec init système : %s", systemErrorToString(result));
   }
 
+  // Initialiser d'abord le gestionnaire de tâches (avant tout autre composant)
+  // pour qu'il puisse superviser les autres initialisations
+  logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Initialisation du gestionnaire de tâches...");
+  taskManager.begin(&uiManager, &wifiManager);
+  
   // Configuration du matériel : GPIO, écran, capteurs, actionneurs
   setupHardware();
 
@@ -393,14 +393,15 @@ void setup() {
   // Démarrage du serveur web et configuration OTA
   setupServer();
 
-  // Lancement des tâches FreeRTOS (UI, capteurs, contrôle, etc.)
-  setupTasks();
+  // Démarrage effectif des tâches FreeRTOS maintenant que tout est initialisé
+  taskManager.startTasks();
+  logPrint((LogLevel)LOG_LEVEL_INFO, "TASKS", "Tâches FreeRTOS démarrées");
 
   // Vérification de l'état global après initialisation
-  if (isSystemHealthy()) {
-    LOG_INFO("INIT", "Système prêt et en bon état");
+  if (systemHealthCheck()) {
+    logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Système prêt et en bon état");
   } else {
-    LOG_WARNING("INIT", "Système prêt avec avertissements");
+    logPrint((LogLevel)LOG_LEVEL_WARNING, "INIT", "Système prêt avec avertissements");
   }
 
   // Affichage initial sur l'écran LCD : statut système et réseau

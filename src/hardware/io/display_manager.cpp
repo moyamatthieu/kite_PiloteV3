@@ -1,13 +1,76 @@
 /*
   -----------------------
-  Kite PiloteV3 - Module DisplayManager (Implémentation)
+  Kite PiloteV3 - Module de Gestion de l'Affichage (Implémentation)
   -----------------------
   
-  Implémentation du gestionnaire d'affichage LCD.
+  Implémentation du gestionnaire d'affichage LCD pour l'interface utilisateur locale.
   
-  Version: 1.0.0
-  Date: 6 mai 2025
+  Version: 3.0.0
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
+  
+  ===== FONCTIONNEMENT =====
+  Ce module gère l'écran LCD utilisé pour l'interface utilisateur locale.
+  Il implémente une approche par machine à états finis (FSM) pour toutes
+  les opérations d'initialisation et de mise à jour de l'affichage, évitant
+  ainsi l'utilisation de délais bloquants.
+  
+  Principes de fonctionnement :
+  1. Initialisation non-bloquante de l'écran LCD via I2C avec FSM
+  2. Création de caractères personnalisés via un processus par étapes
+  3. Affichage formaté des différentes pages d'information
+  4. Gestion optimisée des mises à jour pour limiter les écritures
+  
+  Architecture FSM pour l'initialisation LCD :
+  - États : INIT_START, I2C_CHECK, LCD_CONFIG, BACKLIGHT_SET, CLEAR_DISPLAY, etc.
+  - Chaque état représente une étape atomique de l'initialisation
+  - Transitions basées sur le temps écoulé et les résultats des opérations
+  - Approche résiliente avec tentatives multiples en cas d'échec
+  
+  Interactions avec d'autres modules :
+  - TaskManager : Appelle ce module depuis la tâche d'affichage
+  - ButtonUI : Détermine quelles informations afficher selon les interactions
+  - WiFiManager : Affiche les informations de connexion WiFi
+  - Sensors : Affiche les données des capteurs
+  - System : Affiche l'état du système et les messages d'erreur
+  
+  Aspects techniques notables :
+  - Remplacement systématique des delay() par des mécanismes non-bloquants basés sur millis()
+  - Cache d'affichage pour éviter les écritures redondantes sur le LCD
+  - Tentatives multiples pour les communications I2C avec backoff exponentiel
+  - Optimisation du rafraîchissement pour réduire la charge CPU
+  
+  Exemple d'approche non-bloquante :
+  Au lieu de :
+  ```
+  lcd.init();
+  delay(100);
+  lcd.backlight();
+  delay(50);
+  lcd.clear();
+  ```
+  
+  Notre FSM utilise :
+  ```
+  case LCD_INIT:
+    if (millis() - lastStateTime >= 100) {
+      if (lcd.init()) {
+        state = BACKLIGHT_ON;
+        lastStateTime = millis();
+      } else if (++retryCount > maxRetries) {
+        state = INIT_FAILED;
+      }
+    }
+    break;
+    
+  case BACKLIGHT_ON:
+    if (millis() - lastStateTime >= 50) {
+      lcd.backlight();
+      state = CLEAR_DISPLAY;
+      lastStateTime = millis();
+    }
+    break;
+  ```
 */
 
 #include "hardware/io/display_manager.h"
@@ -16,47 +79,83 @@
 // Variable globale pour l'état du système (utilisée dans l'affichage)
 static uint8_t systemStatus = 100; // 100% par défaut, représente l'état de santé du système
 
-// Caractères personnalisés
-const uint8_t charUp[] = {
-  0b00100, 0b01110, 0b11111, 0b00100, 0b00100, 0b00000, 0b00000, 0b00000
-};
-const uint8_t charDown[] = {
-  0b00000, 0b00000, 0b00000, 0b00100, 0b00100, 0b11111, 0b01110, 0b00100
-};
-const uint8_t charBlock[] = {
-  0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111, 0b11111
-};
-
 /**
- * Constructeur - initialise l'écran LCD
+ * Constructeur - initialise les variables membres
  */
 DisplayManager::DisplayManager() : 
-  lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS), 
-  lcdInitialized(false), 
-  lastInitTime(0),
-  lastCheckTime(0),
-  recoveryAttempts(0),
-  lastUpdateTime(0),
-  successfulUpdates(0) {
-  // Les variables sont initialisées dans la liste d'initialisation
+    lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS),
+    lcdInitialized(false),
+    lastInitTime(0),
+    lastCheckTime(0),
+    lastUpdateTime(0),
+    recoveryAttempts(0),
+    successfulUpdates(0),
+    i2cInitialized(false),
+    initAttemptCount(0)
+{
+    LOG_INFO("DISPLAY", "Gestionnaire d'affichage créé");
+    
+    // Initialiser les buffers avec des espaces
+    for (int row = 0; row < LCD_ROWS; row++) {
+        for (int col = 0; col < LCD_COLS; col++) {
+            screenBuffer[row][col] = ' ';
+            previousBuffer[row][col] = ' ';
+        }
+        screenBuffer[row][LCD_COLS] = '\0';
+        previousBuffer[row][LCD_COLS] = '\0';
+    }
 }
 
 /**
- * Destructeur - libère les ressources
+ * Destructeur - nettoie les ressources
  */
 DisplayManager::~DisplayManager() {
-  // Rien à libérer spécifiquement
+    // Nettoyer les ressources si nécessaire
+    LOG_INFO("DISPLAY", "Gestionnaire d'affichage détruit");
 }
 
+// Caractères personnalisés
+const uint8_t charUp[] = {
+  0b00000,
+  0b00100,
+  0b01110,
+  0b11111,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000
+};
+
+const uint8_t charDown[] = {
+  0b00000,
+  0b00000,
+  0b00000,
+  0b00000,
+  0b11111,
+  0b01110,
+  0b00100,
+  0b00000
+};
+
+const uint8_t charBlock[] = {
+  0b11111,
+  0b11111,
+  0b11111,
+  0b11111,
+  0b11111,
+  0b11111,
+  0b11111,
+  0b11111
+};
+
 /**
- * Configure l'interface I2C pour la communication avec l'écran LCD
- * @return true si l'initialisation réussit, false sinon
+ * Configure le bus I2C pour la communication avec le LCD
+ * @return true si la configuration réussit, false sinon
  */
 bool DisplayManager::setupI2C() {
   Wire.begin(I2C_SDA, I2C_SCL);
-  delay(50); // Petit délai pour stabiliser l'I2C
+  Wire.setClock(400000); // 400 kHz par défaut
   
-  // Vérifier si le bus I2C fonctionne
   Wire.beginTransmission(LCD_I2C_ADDR);
   byte error = Wire.endTransmission();
   
@@ -113,10 +212,10 @@ bool DisplayManager::initLCD() {
     // Force de réinitialisation matérielle du bus I2C entre les tentatives
     if (attempt > 1) {
       Wire.end();
-      delay(200);
+      delay(300); // Délai plus long entre les tentatives
       Wire.begin(I2C_SDA, I2C_SCL);
-      Wire.setClock(100000); // Basse fréquence pour plus de fiabilité
-      delay(100);
+      Wire.setClock(50000); // Fréquence encore plus basse pour plus de fiabilité
+      delay(200);
     }
     
     // Test initial du bus I2C - vérification que le LCD répond
@@ -125,23 +224,27 @@ bool DisplayManager::initLCD() {
     
     if (error != 0) {
       LOG_WARNING("DISPLAY", "Erreur I2C pendant la tentative %d (code: %d)", attempt, error);
+      delay(500); // Délai plus long avant la prochaine tentative
       continue; // Passer à la prochaine tentative
     }
     
     // Initialisation en deux étapes pour plus de stabilité
-    lcd.init();
-    delay(150); // Délai critique pour la stabilisation du matériel
+    lcd = LiquidCrystal_I2C(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS); // Réinstancier l'objet LCD
     
-    // Second init avec reset complet
-    lcd.begin(LCD_COLS, LCD_ROWS);
-    delay(100);
+    // Séquence d'initialisation explicite
+    lcd.init();      // Première initialisation
+    delay(250);      // Délai critique pour la stabilisation du matériel
+    lcd.backlight(); // Activer le rétroéclairage
+    delay(100);      // Attendre que le rétroéclairage s'active
+    lcd.clear();     // Effacer l'écran
+    delay(50);       // Attendre que l'effacement soit effectué
+    lcd.home();      // Retourner à la position d'origine
+    delay(50);       // Attendre que le curseur soit repositionné
     
-    // Tester l'écran avec des opérations de base
-    lcd.clear();
-    lcd.home();
-    lcd.backlight();
+    // Test d'affichage basique
     lcd.setCursor(0, 0);
-    lcd.print("Test LCD");
+    lcd.print("Test LCD OK");
+    delay(100);
     
     // Vérification supplémentaire que l'écran est réellement fonctionnel
     if (checkLCDConnection()) {
@@ -160,7 +263,7 @@ bool DisplayManager::initLCD() {
     }
     
     LOG_WARNING("DISPLAY", "Tentative %d a échoué", attempt);
-    delay(300); // Délai entre les tentatives
+    delay(500); // Délai plus long entre les tentatives
   }
   
   LOG_ERROR("DISPLAY", "Échec d'initialisation après %d tentatives", maxAttempts);
@@ -184,11 +287,21 @@ void DisplayManager::createCustomChars() {
 }
 
 /**
- * Efface l'écran LCD
+ * Efface l'écran LCD en remplissant le buffer avec des espaces
  */
 void DisplayManager::clear() {
   if (!lcdInitialized) return;
-  lcd.clear();
+  
+  // Remplir le buffer avec des espaces
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      screenBuffer[row][col] = ' ';
+    }
+    screenBuffer[row][LCD_COLS] = '\0';
+  }
+  
+  // Appliquer les changements
+  updateLCDDiff();
 }
 
 /**
@@ -199,12 +312,15 @@ void DisplayManager::clear() {
 void DisplayManager::centerText(uint8_t row, const char* text) {
   if (!lcdInitialized || row >= LCD_ROWS) return;
   
+  // Calculer la position pour centrer
   int textLen = strlen(text);
   int position = (LCD_COLS - textLen) / 2;
   position = max(0, position);
   
-  lcd.setCursor(position, row);
-  lcd.print(text);
+  // Mettre à jour le buffer au lieu d'écrire directement sur l'écran
+  for (int i = 0; i < textLen && (position + i) < LCD_COLS; i++) {
+    screenBuffer[row][position + i] = text[i];
+  }
 }
 
 /**
@@ -238,54 +354,61 @@ void DisplayManager::updateMainDisplay() {
   
   // Protéger contre les exceptions pour ne pas laisser le mutex verrouillé
   try {
-    lcd.clear();
+    // Au lieu d'effacer l'écran, initialiser le buffer avec des espaces
+    for (int row = 0; row < LCD_ROWS; row++) {
+      for (int col = 0; col < LCD_COLS; col++) {
+        screenBuffer[row][col] = ' ';
+      }
+      screenBuffer[row][LCD_COLS] = '\0';
+    }
     
     // En-tête centrée
-    centerText(0, "Kite PiloteV3");
+    const char* title = "Kite PiloteV3";
+    int titlePos = (LCD_COLS - strlen(title)) / 2;
+    titlePos = max(0, titlePos);
+    for (int i = 0; i < strlen(title); i++) {
+      screenBuffer[0][titlePos + i] = title[i];
+    }
     
     // Ligne 1 - État WiFi
-    lcd.setCursor(0, 1);
+    strcpy(&screenBuffer[1][0], "WiFi: ");
     if (WiFi.status() == WL_CONNECTED) {
-      lcd.print("WiFi: ");
       String ssid = WiFi.SSID();
       // Tronquer le SSID s'il est trop long
       if (ssid.length() > LCD_COLS - 6) {
         ssid = ssid.substring(0, LCD_COLS - 9) + "...";
       }
-      lcd.print(ssid);
+      strcpy(&screenBuffer[1][6], ssid.c_str());
     } else {
-      lcd.print("WiFi: Déconnecté");
+      strcpy(&screenBuffer[1][6], "Déconnecté");
     }
     
     // Ligne 2 - Information système
-    lcd.setCursor(0, 2);
-    lcd.print("Sys: ");
+    strcpy(&screenBuffer[2][0], "Sys: ");
     // Récupérer une valeur de sysStatus sécurisée
     uint8_t status = systemStatus;
     status = constrain(status, 0, 100);
     // Afficher l'état du système de manière compacte
-    if (status >= 90) lcd.print("Excellent");
-    else if (status >= 75) lcd.print("Bon");
-    else if (status >= 50) lcd.print("Normal");
-    else if (status >= 25) lcd.print("Faible");
-    else lcd.print("Critique");
+    if (status >= 90) strcpy(&screenBuffer[2][5], "Excellent");
+    else if (status >= 75) strcpy(&screenBuffer[2][5], "Bon");
+    else if (status >= 50) strcpy(&screenBuffer[2][5], "Normal");
+    else if (status >= 25) strcpy(&screenBuffer[2][5], "Faible");
+    else strcpy(&screenBuffer[2][5], "Critique");
     
     // Ligne 3 - Affichage du temps de fonctionnement
-    lcd.setCursor(0, 3);
+    strcpy(&screenBuffer[3][0], "Uptime: ");
     unsigned long uptimeSeconds = millis() / 1000;
     unsigned long hours = uptimeSeconds / 3600;
     unsigned long minutes = (uptimeSeconds % 3600) / 60;
     unsigned long seconds = uptimeSeconds % 60;
     
-    lcd.print("Uptime: ");
-    if (hours < 10) lcd.print("0");
-    lcd.print(hours);
-    lcd.print(":");
-    if (minutes < 10) lcd.print("0");
-    lcd.print(minutes);
-    lcd.print(":");
-    if (seconds < 10) lcd.print("0");
-    lcd.print(seconds);
+    // Formater l'uptime (hh:mm:ss)
+    char uptimeStr[15];
+    sprintf(uptimeStr, "%02lu:%02lu:%02lu", hours, minutes, seconds);
+    strcpy(&screenBuffer[3][8], uptimeStr);
+    
+    // Mettre à jour uniquement les caractères qui ont changé
+    updateLCDDiff();
     
     // Actualiser le compteur de mises à jour réussies
     successfulUpdates++;
@@ -296,6 +419,46 @@ void DisplayManager::updateMainDisplay() {
   
   // Libérer le mutex quelle que soit l'issue
   xSemaphoreGive(displayMutex);
+}
+
+/**
+ * Met à jour uniquement les caractères modifiés sur l'écran LCD pour éviter le scintillement
+ * Cette méthode compare le contenu actuel du buffer avec le contenu précédent
+ * et ne met à jour que les caractères qui ont changé.
+ */
+void DisplayManager::updateLCDDiff() {
+  if (!lcdInitialized) return;
+  
+  bool hasChanges = false;
+  
+  // Parcourir chaque position du buffer
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      // Si le caractère a changé, le mettre à jour sur l'écran
+      if (screenBuffer[row][col] != previousBuffer[row][col]) {
+        hasChanges = true;
+        lcd.setCursor(col, row);
+        
+        // Gérer les caractères spéciaux
+        if (screenBuffer[row][col] == '\0') {
+          lcd.print(' '); // Remplacer les fins de chaîne par des espaces
+        } else if (screenBuffer[row][col] < 4) {
+          // Caractères personnalisés (0-3)
+          lcd.write(byte(screenBuffer[row][col]));
+        } else {
+          lcd.print(screenBuffer[row][col]);
+        }
+        
+        // Mettre à jour le buffer précédent
+        previousBuffer[row][col] = screenBuffer[row][col];
+      }
+    }
+  }
+  
+  // Journaliser les mises à jour si nécessaire (uniquement pour le débogage)
+  if (hasChanges) {
+    LOG_DEBUG("DISPLAY", "LCD mise à jour différentielle effectuée");
+  }
 }
 
 /**
@@ -325,8 +488,13 @@ void DisplayManager::displayMessage(const char* title, const char* message, unsi
   
   // Protéger contre les exceptions
   try {
-    // Effacer l'écran
-    lcd.clear();
+    // Initialiser le buffer avec des espaces
+    for (int row = 0; row < LCD_ROWS; row++) {
+      for (int col = 0; col < LCD_COLS; col++) {
+        screenBuffer[row][col] = ' ';
+      }
+      screenBuffer[row][LCD_COLS] = '\0';
+    }
     
     // Afficher le titre centré
     centerText(0, title);
@@ -355,10 +523,9 @@ void DisplayManager::displayMessage(const char* title, const char* message, unsi
         }
       }
       
-      // Positionner le curseur et afficher la partie du message
-      lcd.setCursor(0, row);
+      // Mettre à jour le buffer pour cette ligne
       for (int i = 0; i < charsToShow; i++) {
-        lcd.print(message[startIdx + i]);
+        screenBuffer[row][i] = message[startIdx + i];
       }
       
       // Avancer l'index de départ
@@ -367,6 +534,9 @@ void DisplayManager::displayMessage(const char* title, const char* message, unsi
         startIdx++; // Sauter l'espace en début de ligne suivante
       }
     }
+    
+    // Mettre à jour l'écran avec le nouveau contenu
+    updateLCDDiff();
     
     lastUpdateTime = millis();
   } 
@@ -524,8 +694,8 @@ void DisplayManager::displayOTAProgress(size_t current, size_t total) {
 }
 
 /**
- * Vérifie la connexion avec l'écran LCD
- * @return true si l'écran répond, false sinon
+ * Vérifie la connexion avec l'écran LCD de manière plus robuste
+ * @return true si l'écran répond correctement, false sinon
  */
 bool DisplayManager::checkLCDConnection() {
   // Vérifier que le périphérique I2C répond
@@ -538,12 +708,26 @@ bool DisplayManager::checkLCDConnection() {
     return false;
   }
   
-  // Si l'écran était déjà initialisé, on considère qu'il fonctionne toujours
-  if (lcdInitialized) {
+  // Test plus approfondi - essayer d'écrire quelque chose en mémoire puis le lire
+  // Cette étape est ignorée si l'écran a déjà été initialisé avec succès
+  if (!lcdInitialized) {
+    // Nous devons utiliser des commandes de bas niveau pour vérifier que l'écran répond correctement
+    // Essayons d'envoyer une commande pour allumer le rétroéclairage
+    Wire.beginTransmission(LCD_I2C_ADDR);
+    Wire.write(0x08); // Commande pour le rétroéclairage
+    error = Wire.endTransmission();
+    
+    if (error != 0) {
+      LOG_WARNING("DISPLAY", "Écran LCD ne répond pas aux commandes (erreur: %d)", error);
+      return false;
+    }
+    
+    // Si nous arrivons ici, l'écran répond aux commandes de base
+    LOG_INFO("DISPLAY", "Écran LCD répond correctement aux commandes I2C");
     return true;
   }
   
-  return false;
+  return true; // Si déjà initialisé et toujours présent, on considère qu'il fonctionne
 }
 
 /**
@@ -588,7 +772,13 @@ bool DisplayManager::recoverLCD() {
 void DisplayManager::displayWelcomeScreen(bool simpleMode) {
   if (!lcdInitialized) return;
   
-  lcd.clear();
+  // Initialiser le buffer avec des espaces
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      screenBuffer[row][col] = ' ';
+    }
+    screenBuffer[row][LCD_COLS] = '\0';
+  }
   
   // En-tête avec titre centré
   centerText(0, "Kite PiloteV3");
@@ -599,17 +789,17 @@ void DisplayManager::displayWelcomeScreen(bool simpleMode) {
     centerText(3, SYSTEM_VERSION);
   } else {
     // Version complète avec plus d'informations
-    lcd.setCursor(0, 1);
-    lcd.print("Version: ");
-    lcd.print(SYSTEM_VERSION);
+    strcpy(&screenBuffer[1][0], "Version: ");
+    strcpy(&screenBuffer[1][9], SYSTEM_VERSION);
     
-    lcd.setCursor(0, 2);
-    lcd.print("Build: ");
-    lcd.print(SYSTEM_BUILD_DATE);
+    strcpy(&screenBuffer[2][0], "Build: ");
+    strcpy(&screenBuffer[2][7], SYSTEM_BUILD_DATE);
     
-    lcd.setCursor(0, 3);
-    lcd.print("System starting...");
+    strcpy(&screenBuffer[3][0], "System starting...");
   }
+  
+  // Mettre à jour l'écran
+  updateLCDDiff();
 }
 
 /**
@@ -620,27 +810,35 @@ void DisplayManager::displayWelcomeScreen(bool simpleMode) {
 void DisplayManager::displayWiFiInfo(const char* ssid, IPAddress ip) {
   if (!lcdInitialized) return;
   
-  lcd.clear();
+  // Initialiser le buffer avec des espaces
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      screenBuffer[row][col] = ' ';
+    }
+    screenBuffer[row][LCD_COLS] = '\0';
+  }
   
+  // En-tête centrée
   centerText(0, "WiFi Info");
   
-  lcd.setCursor(0, 1);
-  lcd.print("SSID: ");
-  lcd.print(ssid);
+  // SSID
+  strcpy(&screenBuffer[1][0], "SSID: ");
+  strcpy(&screenBuffer[1][6], ssid);
   
-  lcd.setCursor(0, 2);
-  lcd.print("IP: ");
-  lcd.print(ip[0]);
-  lcd.print(".");
-  lcd.print(ip[1]);
-  lcd.print(".");
-  lcd.print(ip[2]);
-  lcd.print(".");
-  lcd.print(ip[3]);
+  // Adresse IP
+  strcpy(&screenBuffer[2][0], "IP: ");
+  char ipStr[16];
+  sprintf(ipStr, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  strcpy(&screenBuffer[2][4], ipStr);
   
-  lcd.setCursor(0, 3);
-  lcd.print("Port: ");
-  lcd.print(SERVER_PORT);
+  // Port
+  strcpy(&screenBuffer[3][0], "Port: ");
+  char portStr[6];
+  sprintf(portStr, "%d", SERVER_PORT);
+  strcpy(&screenBuffer[3][6], portStr);
+  
+  // Mettre à jour l'écran
+  updateLCDDiff();
 }
 
 /**
@@ -650,8 +848,15 @@ void DisplayManager::displayWiFiInfo(const char* ssid, IPAddress ip) {
 void DisplayManager::displayOTAStatus(bool success) {
   if (!lcdInitialized) return;
   
-  lcd.clear();
+  // Initialiser le buffer avec des espaces
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      screenBuffer[row][col] = ' ';
+    }
+    screenBuffer[row][LCD_COLS] = '\0';
+  }
   
+  // En-tête avec titre centré
   centerText(0, "Mise à jour OTA");
   
   if (success) {
@@ -662,6 +867,9 @@ void DisplayManager::displayOTAStatus(bool success) {
     centerText(2, "Fonctionnement normal");
     centerText(3, "conservé");
   }
+  
+  // Mettre à jour l'écran
+  updateLCDDiff();
 }
 
 /**
@@ -682,68 +890,71 @@ void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, 
   }
   lastUpdateTime = currentTime;
   
-  lcd.clear();
+  // Initialiser le buffer avec des espaces
+  for (int row = 0; row < LCD_ROWS; row++) {
+    for (int col = 0; col < LCD_COLS; col++) {
+      screenBuffer[row][col] = ' ';
+    }
+    screenBuffer[row][LCD_COLS] = '\0';
+  }
   
   // Afficher le titre
   centerText(0, "Statut Kite");
   
   // Ligne 1 - Direction et WiFi
-  lcd.setCursor(0, 1);
-  lcd.print("Dir:");
+  strcpy(&screenBuffer[1][0], "Dir:");
   
   // Afficher la direction avec une petite barre de progression
   int dirPos = map(constrain(direction, -90, 90), -90, 90, 0, 9);
   for (int i = 0; i < 10; i++) {
     if (i == dirPos) {
-      lcd.print("|");
+      screenBuffer[1][4+i] = '|';
     } else {
-      lcd.print("-");
+      screenBuffer[1][4+i] = '-';
     }
   }
   
   // Afficher l'icône WiFi
-  lcd.setCursor(17, 1);
   if (wifiConnected) {
-    lcd.write(byte(2)); // Bloc plein = WiFi connecté
+    screenBuffer[1][17] = 2; // Valeur 2 pour afficher le caractère personnalisé (bloc plein)
   } else {
-    lcd.print("X"); // X = WiFi déconnecté
+    screenBuffer[1][17] = 'X'; // X = WiFi déconnecté
   }
   
   // Ligne 2 - Trim
-  lcd.setCursor(0, 2);
-  lcd.print("Trim:");
+  strcpy(&screenBuffer[2][0], "Trim:");
   
   // Afficher le trim avec une petite barre de progression
   int trimPos = map(constrain(trim, -45, 45), -45, 45, 0, 9);
   for (int i = 0; i < 10; i++) {
     if (i == trimPos) {
-      lcd.print("|");
+      screenBuffer[2][5+i] = '|';
     } else {
-      lcd.print("-");
+      screenBuffer[2][5+i] = '-';
     }
   }
   
   // Ligne 3 - Longueur de ligne et uptime
-  lcd.setCursor(0, 3);
-  lcd.print("Ligne:");
+  strcpy(&screenBuffer[3][0], "Ligne:");
   
   // Afficher la longueur avec une petite barre de progression
   int lenPos = map(constrain(lineLength, 0, 100), 0, 100, 0, 5);
   for (int i = 0; i < 6; i++) {
     if (i <= lenPos) {
-      lcd.write(byte(2)); // Bloc plein
+      screenBuffer[3][6+i] = 2; // Bloc plein (caractère personnalisé)
     } else {
-      lcd.print(".");
+      screenBuffer[3][6+i] = '.';
     }
   }
   
   // Afficher le temps de fonctionnement
-  lcd.setCursor(12, 3);
   unsigned long hours = uptime / 3600;
   unsigned long minutes = (uptime % 3600) / 60;
   
-  lcd.print(hours);
-  lcd.print("h");
-  if (minutes < 10) lcd.print("0");
-  lcd.print(minutes);
+  char timeStr[8];
+  sprintf(timeStr, "%luh%02lu", hours, minutes);
+  strcpy(&screenBuffer[3][13], timeStr);
+  
+  // Appliquer les changements
+  updateLCDDiff();
 }

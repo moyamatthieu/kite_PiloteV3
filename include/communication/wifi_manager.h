@@ -31,6 +31,9 @@ public:
     bool startAP(const char* ssid, const char* password = NULL);
     void stopAP();
     bool isAPActive();
+
+    // FSM handling
+    void handleFSM();
     
 private:
     char ssid[33];           // SSID du réseau (max 32 caractères + null)
@@ -38,6 +41,7 @@ private:
     bool connected;          // État de connexion
     bool apActive;           // Mode AP actif
     unsigned long lastConnectAttempt; // Timestamp de la dernière tentative
+    uint32_t timeout;        // Timeout for operations
     
     // Méthodes privées
     void updateConnectionStatus();

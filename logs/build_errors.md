@@ -110,6 +110,86 @@
   - Déplacement des pins de boutons de `button_ui.h` vers `config.h`
   - Élimination des redondances et harmonisation des noms
 
+## Mise à jour du 7 mai 2025
+
+### Problèmes de types LogLevel et journalisation
+
+#### 1. Conflit entre types uint8_t et LogLevel
+- **Problème** : Incompatibilité entre les fonctions déclarées avec `LogLevel` et implémentées avec `uint8_t`
+- **Fichiers concernés** : 
+  - `include/core/logging.h`
+  - `src/core/logging.cpp`
+- **Erreur** : `LogLevel' does not name a type; did you mean 'logSetLevel'` et autres erreurs de conversion de type
+- **Solution** : 
+  - Création d'une énumération `LogLevel` qui utilise les valeurs définies dans `config.h`
+  - Ajout de casts explicites dans les macros de journalisation
+  - Modification des signatures des fonctions pour utiliser le type `LogLevel` partout
+
+#### 2. Redéfinition de MEM_HISTORY_SIZE
+- **Problème** : `MEM_HISTORY_SIZE` défini à la fois dans `config.h` et redéfini dans `logging.cpp`
+- **Fichiers concernés** :
+  - `include/core/config.h`
+  - `src/core/logging.cpp`
+- **Solution** :
+  - Suppression de la redéfinition dans `logging.cpp`
+  - Utilisation exclusive de la définition de `config.h`
+
+#### 3. Utilisation directe des constantes LOG_LEVEL_* 
+- **Problème** : Dans `main.cpp`, appels directs à `logInit()` et `logPrint()` avec les constantes `LOG_LEVEL_*` non castées
+- **Fichiers concernés** :
+  - `src/core/main.cpp`
+- **Erreur** : `invalid conversion from 'int' to 'LogLevel' [-fpermissive]`
+- **Solution** :
+  - Ajout de casts explicites vers `LogLevel` pour toutes les constantes `LOG_LEVEL_*` utilisées directement
+  - Exemple : `logInit((LogLevel)LOG_LEVEL_INFO, 115200);`
+
+### Centralisation des constantes
+
+#### 1. Centralisation complète des constantes de journalisation
+- **Problème** : Constantes de journalisation définies en partie dans `logging.h` et en partie dans `config.h`
+- **Fichiers concernés** :
+  - `include/core/config.h`
+  - `include/core/logging.h`
+- **Solution** :
+  - Regroupement de toutes les constantes dans `config.h` dans une section dédiée "CONFIGURATION JOURNALISATION"
+  - Modification de `logging.h` pour qu'il importe ces constantes depuis `config.h`
+  - Ajout de sections thématiques dans `config.h` pour une meilleure organisation
+
+#### 2. Résolution du conflit de LOG_BUFFER_SIZE
+- **Problème** : `LOG_BUFFER_SIZE` défini différemment dans plusieurs fichiers
+- **Fichiers concernés** :
+  - `include/core/config.h` (192)
+  - `include/core/logging.h` (256)
+- **Solution** :
+  - Définition unique dans `config.h` fixée à 192
+  - Ajout de garde `#ifndef` pour éviter les redéfinitions
+  - Prévention des avertissements de redéfinition lors de la compilation
+
+#### 3. Centralisation des constantes de tâches FreeRTOS
+- **Problème** : Constantes liées aux tâches FreeRTOS définies dans différents fichiers
+- **Fichiers concernés** :
+  - `include/core/config.h`
+  - `include/core/task_manager.h`
+- **Solution** :
+  - Déplacement de `MAX_TASKS` et autres constantes dans `config.h`
+  - Mise à jour de `task_manager.h` pour inclure `config.h` et utiliser ses définitions
+
+### Implémentations manquantes
+
+#### 1. Implémentation complète de TaskManager
+- **Problème** : Méthodes manquantes dans la classe `TaskManager`
+- **Fichiers concernés** :
+  - `src/core/task_manager.cpp`
+- **Erreur** : Références indéfinies à diverses méthodes de `TaskManager`
+- **Solution** :
+  - Implémentation complète de toutes les méthodes manquantes
+  - Ajout des variables statiques requises
+  - Implémentation des fonctions de tâches (displayTask, buttonTask, etc.)
+
+### Statistiques de mémoire actuelles
+- **RAM** : 14,6% utilisée (48 000 octets sur 327 680 octets)
+- **Flash** : 81,9% utilisée (1 073 417 octets sur 1 310 720 octets)
+
 ## Erreurs identifiées précédemment (5 mai 2025)
 
 ### 1. Erreur dans task_manager.h
@@ -169,3 +249,73 @@ control/
 3. Résoudre les conflits de redéfinition de macros
 4. Ajouter les inclusions manquantes pour Wire.h
 5. Standardiser tous les chemins d'inclusion
+
+# Guide de reprise du travail - Kite PiloteV3
+
+## Statut actuel du projet (7 mai 2025)
+
+### ✅ Corrections récemment implémentées
+1. **Écran LCD sans scintillement** - Implémentation d'un système de buffer matriciel pour les mises à jour de l'écran LCD
+2. **Monitoring système** - Ajout d'une tâche de surveillance qui vérifie l'état du système et affiche des statistiques
+3. **Connexion potentiomètres-servomoteurs** - Implémentation de la connexion entre les entrées (potentiomètres) et les sorties (servomoteurs)
+4. **Initialisation des servomoteurs** - Optimisation de la machine à états finis pour l'initialisation des servomoteurs
+
+### 🚧 Problèmes en cours
+1. **Servomoteurs** - Les servomoteurs sont maintenant fonctionnels mais pourraient bénéficier d'une calibration plus précise
+2. **Monitoring avancé** - Le monitoring pourrait inclure des métriques plus détaillées sur l'utilisation CPU et mémoire
+
+## Points de reprise pour la prochaine session
+
+### 1️⃣ Améliorations de l'interface utilisateur
+- [ ] Ajouter une page de calibration des servomoteurs dans l'interface web
+- [ ] Améliorer l'affichage LCD pour montrer les valeurs actuelles des servomoteurs
+- [ ] Implémenter des animations sur l'écran LCD pour les transitions entre menus
+
+### 2️⃣ Optimisations des performances
+- [ ] Optimiser davantage la fréquence de mise à jour des servomoteurs
+- [ ] Réduire la consommation mémoire et CPU de la tâche de monitoring
+- [ ] Implémenter une gestion d'économie d'énergie pour les périodes d'inactivité
+
+### 3️⃣ Stabilité et robustesse
+- [ ] Ajouter un système de sauvegarde/restauration des paramètres dans la mémoire flash
+- [ ] Implémenter un mécanisme de détection et récupération des blocages système
+- [ ] Améliorer la journalisation pour faciliter le diagnostic des problèmes
+
+### 4️⃣ Fonctionnalités à développer
+- [ ] Implémenter l'autopilote avec des trajectoires prédéfinies
+- [ ] Ajouter le support pour l'IMU (capteur d'orientation)
+- [ ] Développer la fonctionnalité de mesure de tension des lignes
+
+## Guide rapide pour redémarrer le développement
+
+1. **Vérification du système**
+   ```bash
+   pio run -t clean
+   pio run
+   ```
+
+2. **Visualisation du monitoring**
+   - Ouvrir le moniteur série pour vérifier le statut du système
+   ```bash
+   pio device monitor -b 115200
+   ```
+
+3. **Validation hardware**
+   - S'assurer que les servomoteurs répondent aux commandes des potentiomètres
+   - Vérifier l'affichage LCD pour confirmer qu'il reste sans scintillement
+
+4. **Structure des fichiers clés**
+   - `src/hardware/actuators/servo.cpp`: Contrôle des servomoteurs
+   - `src/hardware/io/display_manager.cpp`: Gestion de l'affichage LCD
+   - `src/core/task_manager.cpp`: Gestion des tâches FreeRTOS
+   - `src/hardware/io/potentiometer_manager.cpp`: Gestion des potentiomètres
+
+## Statistiques actuelles du système
+- **RAM**: ~67% utilisée (217K/323K octets)
+- **Mémoire libre minimale**: 217K octets
+- **Bloc maximum allouable**: 110K octets
+
+## Notes et rappels
+- La tâche de monitoring envoie des statistiques toutes les 5 secondes
+- Les servomoteurs sont initialisés avec les timers 0 et 1
+- Le système de buffer LCD utilise une détection de différences pour minimiser les écritures

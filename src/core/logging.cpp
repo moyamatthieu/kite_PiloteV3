@@ -14,7 +14,7 @@
 #include <stdarg.h>
 
 // Variable globale pour le niveau de journalisation actuel
-uint8_t currentLogLevel = LOG_LEVEL_INFO; // Niveau par défaut
+LogLevel currentLogLevel = (LogLevel)LOG_LEVEL_INFO; // Niveau par défaut
 
 // Noms des niveaux de journalisation pour l'affichage
 static const char* LOG_LEVEL_NAMES[] = {
@@ -57,25 +57,44 @@ static unsigned long startTime = 0;
 static char logBuffer[LOG_BUFFER_SIZE];
 
 /**
+ * Obtient une représentation texte d'un niveau de journalisation
+ * @param level Niveau de log.
+ * @return Chaîne de caractères décrivant le niveau de log.
+ */
+const char* logLevelToString(LogLevel level) {
+  if (level >= LOG_LEVEL_NONE && level <= LOG_LEVEL_DEBUG) {
+    return LOG_LEVEL_NAMES[level];
+  }
+  return "UNKNOWN";
+}
+
+/**
  * Initialise le système de journalisation.
  * @param level Niveau de log.
  * @param baudRate Vitesse de communication série.
  */
-void logInit(uint8_t level, unsigned long baudRate) {
+void logInit(LogLevel level, unsigned long baudRate) {
   Serial.begin(baudRate);
+  // Initialize the start time for relative timestamps
+  startTime = millis();
+  #if defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_ESP8266)
   while (!Serial) {
-    ;
+    delay(10); // Wait for Serial to initialize
   }
-  Serial.printf(COLOR_GREEN "[INFO] [LOGGING] Initialisation du système de log au niveau %d" colorReset "\n", level);
+  #endif
+  Serial.printf(COLOR_GREEN "[INFO] [LOGGING] Initialisation du système de log au niveau %d\n" COLOR_RESET, level);
 }
 
 /**
  * Définit le niveau de journalisation
  * @param level Niveau de log.
  */
-void logSetLevel(uint8_t level) {
+void logSetLevel(LogLevel level) {
   currentLogLevel = level;
-  logPrint(LOG_LEVEL_INFO, "LOG", "Niveau de journalisation changé: %s", logLevelToString(level));
+  const char* levelName = (level >= LOG_LEVEL_NONE && level <= LOG_LEVEL_DEBUG) 
+                       ? LOG_LEVEL_NAMES[level] 
+                       : "UNKNOWN";
+  Serial.printf(COLOR_GREEN "[INFO] [LOG] Niveau de journalisation changé: %s\n" COLOR_RESET, levelName);
 }
 
 /**
@@ -85,7 +104,7 @@ void logSetLevel(uint8_t level) {
  * @param format Format du message.
  * @param ... Arguments variables.
  */
-void logPrint(uint8_t level, const char* tag, const char* format, ...) {
+void logPrint(LogLevel level, const char* tag, const char* format, ...) {
   if (level > currentLogLevel || level == LOG_LEVEL_NONE) {
     return;
   }
@@ -147,24 +166,8 @@ void logPrint(uint8_t level, const char* tag, const char* format, ...) {
 #endif
 }
 
-/**
- * Obtient une représentation texte d'un niveau de journalisation
- * @param level Niveau de log.
- * @return Chaîne de caractères décrivant le niveau de log.
- */
-const char* logLevelToString(uint8_t level) {
-  if (level >= LOG_LEVEL_NONE && level <= LOG_LEVEL_DEBUG) {
-    return LOG_LEVEL_NAMES[level];
-  }
-  return "UNKNOWN";
-}
-
-// Historique des valeurs de mémoire libre pour le graphique
-#if MEMORY_OPTIMIZATION_ENABLED
-#define MEM_HISTORY_SIZE 10
-#else
-#define MEM_HISTORY_SIZE 30
-#endif
+// Utilisons la définition de MEM_HISTORY_SIZE depuis config.h
+// au lieu de la redéfinir ici
 
 static uint32_t freeHeapHistory[MEM_HISTORY_SIZE] = {0};
 static uint32_t minFreeHeapHistory[MEM_HISTORY_SIZE] = {0};
@@ -196,11 +199,11 @@ void logMemoryUsage(const char* tag) {
   }
   
 #if MEMORY_OPTIMIZATION_ENABLED
-  logPrint(LOG_LEVEL_INFO, tag, "Mem: %u/%u (%u%%), Min %u, Max %u", 
+  logPrint((LogLevel)LOG_LEVEL_INFO, tag, "Mem: %u/%u (%u%%), Min %u, Max %u", 
            freeHeap, totalHeap, (freeHeap * 100) / totalHeap, 
            minFreeHeap, maxAllocHeap);
 #else
-  logPrint(LOG_LEVEL_INFO, tag, "Mémoire: Libre %u/%u octets (%u%%), Min libre %u, Max bloc %u", 
+  logPrint((LogLevel)LOG_LEVEL_INFO, tag, "Mémoire: Libre %u/%u octets (%u%%), Min libre %u, Max bloc %u", 
            freeHeap, totalHeap, (freeHeap * 100) / totalHeap, 
            minFreeHeap, maxAllocHeap);
 #endif
@@ -228,7 +231,7 @@ void logMemoryGraph() {
   }
   
   if (!historyFilled && historyIndex < 2) {
-    logPrint(LOG_LEVEL_INFO, "MEM", "Pas assez de données pour afficher un graphique");
+    logPrint((LogLevel)LOG_LEVEL_INFO, "MEM", "Pas assez de données pour afficher un graphique");
     return;
   }
   

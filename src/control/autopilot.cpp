@@ -3,11 +3,37 @@
   Kite PiloteV3 - Module Autopilote (Implémentation)
   -----------------------
   
-  Implémentation du module d'autopilote pour le contrôle automatique du kite.
+  Implémentation du système d'autopilote pour le contrôle autonome du cerf-volant.
   
-  Version: 1.0.0
-  Date: 2 mai 2025
+  Version: 3.0.0
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
+  
+  ===== FONCTIONNEMENT =====
+  Ce module implémente le système d'autopilote qui permet au cerf-volant
+  de suivre automatiquement des trajectoires prédéfinies ou de maintenir
+  une position stable dans des conditions de vent variables.
+  
+  Principes de fonctionnement :
+  1. Acquisition des données des capteurs (IMU, tension, vent)
+  2. Traitement des données par des contrôleurs PID
+  3. Calcul des commandes à envoyer aux servomoteurs
+  4. Suivi des trajectoires et adaptation aux conditions
+  
+  Interactions avec d'autres modules :
+  - TaskManager : Exécute le code d'autopilote dans une tâche dédiée
+  - Servo : Exécute les commandes calculées par l'autopilote
+  - IMU : Fournit des données d'orientation et d'accélération
+  - Wind : Fournit des données sur la vitesse et la direction du vent
+  - Tension : Fournit des données sur la tension des lignes
+  - Safety : Fournit des limites et des contraintes de sécurité
+  - Trajectory : Fournit des points de trajectoire à suivre
+  
+  Aspects techniques notables :
+  - Utilisation de filtres de Kalman pour fusionner les données des capteurs
+  - Contrôleurs PID avec anti-windup pour éviter la saturation
+  - Adaptabilité aux changements de conditions météorologiques
+  - Logique de sécurité intégrée pour éviter les situations dangereuses
 */
 
 #include "control/autopilot.h"

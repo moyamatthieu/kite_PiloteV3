@@ -66,7 +66,7 @@
 
 // Configuration ADC
 #define ADC_RESOLUTION         4095  // Résolution ADC 12 bits (ESP32)
-#define ADC_SMOOTHING_FACTOR   0.1f  // Filtre passe-bas pour lecture ADC
+// No change needed here
 #define POT_DEADZONE           10    // Zone morte pour éviter bruit
 
 // === CONFIGURATION RÉSEAU ===
@@ -113,22 +113,53 @@
 // Configuration de l'affichage
 #define DISPLAY_UPDATE_THROTTLE    200    // Limite de mise à jour d'affichage (ms)
 
+// === CONFIGURATION JOURNALISATION ===
+
+// Niveaux de journalisation
+#define LOG_LEVEL_NONE    0       // Pas de journalisation
+#define LOG_LEVEL_ERROR   1       // Erreurs critiques uniquement
+#define LOG_LEVEL_WARNING 2       // Erreurs et avertissements
+#define LOG_LEVEL_INFO    3       // Informations générales
+#define LOG_LEVEL_DEBUG   4       // Messages de débogage détaillés
+
+// Constantes liées à la journalisation
+#define LOG_TIMESTAMP_BUFFER_SIZE 30      // Taille du buffer d'horodatage
+#define MEM_HISTORY_SIZE          30      // Nombre d'entrées dans l'historique mémoire
+#define DEFAULT_LOG_LEVEL         LOG_LEVEL_INFO  // Niveau de log par défaut
+
+// Codes de couleur pour terminal ANSI
+#define COLOR_RED         "\033[31m"  // Rouge pour les erreurs
+#define COLOR_GREEN       "\033[32m"  // Vert pour les informations
+#define COLOR_YELLOW      "\033[33m"  // Jaune pour les avertissements
+#define COLOR_BLUE        "\033[34m"  // Bleu
+#define COLOR_MAGENTA     "\033[35m"  // Magenta
+#define COLOR_CYAN        "\033[36m"  // Cyan pour le débogage
+#define COLOR_RESET       "\033[0m"   // Réinitialise la couleur
+
+// === CONFIGURATION MÉMOIRE ===
+
 // Configuration mémoire
 #ifndef MEMORY_OPTIMIZATION_ENABLED
-#define MEMORY_OPTIMIZATION_ENABLED true // Active les optimisations de mémoire
+#define MEMORY_OPTIMIZATION_ENABLED true  // Active les optimisations de mémoire
 #endif
 #define STRING_BUFFER_SIZE         128    // Taille des buffers pour chaînes
 #define LOG_BUFFER_SIZE            192    // Taille du buffer de log
 #define MAX_DISPLAY_BUFFER_SIZE    128    // Réduit - LCD a besoin de moins de mémoire que TFT
+#define JSON_DOCUMENT_SIZE         2048   // Taille pour les documents JSON
 
 // === CONFIGURATION TÂCHES FREERTOS ===
 
 // Taille des piles de tâches FreeRTOS (en mots)
-#define DISPLAY_TASK_STACK_SIZE   2048    // Réduit pour optimisation mémoire - LCD simple
+#define DISPLAY_TASK_STACK_SIZE   4096    // Réduit pour optimisation mémoire - LCD simple
 #define POT_TASK_STACK_SIZE       2048    // Tâche de lecture des potentiomètres
+#define MONITOR_TASK_STACK_SIZE   4096    // Taille de pile pour la tâche de monitoring
 #define MOTOR_TASK_STACK_SIZE     3072    // Tâche de contrôle des moteurs
 #define WIFI_TASK_STACK_SIZE      4096    // Tâche WiFi
 #define SYSTEM_TASK_STACK_SIZE    2048    // Réduit pour optimisation mémoire
+#define BUTTON_TASK_STACK_SIZE    2048    // Tâche pour la gestion des boutons
+#define LOGGING_TASK_STACK_SIZE   2048    // Tâche pour la journalisation
+#define IMU_TASK_STACK_SIZE       3072    // Tâche pour le capteur IMU
+#define WINCH_TASK_STACK_SIZE     3072    // Tâche pour le treuil
 
 // Priorités des tâches FreeRTOS (0-24, 24 étant la plus haute)
 #define DISPLAY_TASK_PRIORITY      2      // Priorité tâche affichage
@@ -136,9 +167,14 @@
 #define POT_TASK_PRIORITY          2      // Priorité tâche potentiomètres
 #define MOTOR_TASK_PRIORITY        3      // Priorité tâche moteurs
 #define SYSTEM_TASK_PRIORITY       1      // Priorité tâche système
+#define BUTTON_TASK_PRIORITY       2      // Priorité tâche boutons
+#define LOGGING_TASK_PRIORITY      1      // Priorité tâche journalisation
+#define IMU_TASK_PRIORITY          3      // Priorité tâche IMU
+#define WINCH_TASK_PRIORITY        3      // Priorité tâche treuil
 
 // Configuration de FreeRTOS
 #define configMAX_TASKS            15     // Nombre max de tâches autorisées
+#define MAX_TASKS                  10     // Nombre maximum de tâches gérées par TaskManager
 
 // Configuration de FreeRTOS pour les statistiques de tâches
 #define configUSE_TRACE_FACILITY              1

@@ -16,7 +16,7 @@
 */
 
 #include "../../include/core/system.h"
-#include "../../include/utils/logging.h"
+#include "../../include/core/logging.h"
 #include <esp_system.h>
 #include <Arduino.h>
 #include <esp_task_wdt.h>   // Ajout: inclusion pour les fonctions watchdog

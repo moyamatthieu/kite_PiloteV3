@@ -36,6 +36,13 @@ private:
     bool i2cInitialized;       // État d'initialisation du bus I2C
     uint8_t initAttemptCount;  // Nombre de tentatives d'initialisation
 
+    // Ajout d'un buffer LCD pour optimiser les rafraîchissements
+    char screenBuffer[LCD_ROWS][LCD_COLS+1]; // +1 pour le caractère nul de fin de chaîne
+    char previousBuffer[LCD_ROWS][LCD_COLS+1];
+    
+    // Méthode pour mettre à jour uniquement les caractères modifiés
+    void updateLCDDiff();
+
 public:
     // Constructeur et destructeur
     DisplayManager();

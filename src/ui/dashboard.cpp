@@ -96,15 +96,16 @@ bool dashboardUpdateKite(const IMUData& imuData) {
   // Ceci est une implémentation simplifiée
   
   // Exemple: Estimer l'altitude basée sur l'angle et des modèles simples
-  float angleRad = imuData.pitch * (PI / 180.0f);
+  // orientation[0] = pitch, orientation[1] = roll, orientation[2] = yaw
+  float angleRad = imuData.orientation[0] * (PI / 180.0f);
   float lineLength = dashboardData.lineLength; // Longueur actuelle des lignes
   
   dashboardData.kiteAltitude = sin(angleRad) * lineLength / 100.0f; // cm → m
   
   // Calculer la vitesse du kite en fonction des données gyroscopiques
   // Conversion des taux de rotation en une estimation de vitesse
-  // Correction : utilisation de rollRate, pitchRate, yawRate au lieu de gyroX, gyroY, gyroZ
-  dashboardData.kiteSpeed = sqrt(sq(imuData.rollRate) + sq(imuData.pitchRate) + sq(imuData.yawRate)) * 0.01f;
+  // gyro[0] = vitesse angulaire x, gyro[1] = vitesse angulaire y, gyro[2] = vitesse angulaire z
+  dashboardData.kiteSpeed = sqrt(sq(imuData.gyro[0]) + sq(imuData.gyro[1]) + sq(imuData.gyro[2])) * 0.01f;
   
   // Puissance estimée basée sur la vitesse et la tension (formule simplifiée)
   dashboardData.kitePower = dashboardData.kiteSpeed * dashboardData.lineTension * 10.0f;

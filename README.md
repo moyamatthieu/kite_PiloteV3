@@ -29,6 +29,24 @@ Cette architecture MCP offre plusieurs avantages pour un projet IoT complexe:
 - **Adaptabilité**: particulièrement adaptée aux ressources limitées des systèmes embarqués
 - **Testabilité**: chaque composant peut être testé indépendamment
 
+## Améliorations récentes
+
+### 1. Machine à États Finis (FSM) Non-Bloquante
+Implémentation d'une approche par machine à états finis pour remplacer l'utilisation de `delay()` dans tout le projet :
+- **Initialisation asynchrone des servomoteurs** : La fonction servoInitAll() utilise une FSM pour éviter tout délai bloquant
+- **Communication WiFi non-bloquante** : Gestionnaire WiFi redessiné avec FSM pour maintenir la réactivité du système
+- **Interfaces utilisateur fluides** : Écran LCD et entrées utilisateur gérés sans bloquer le thread principal
+
+### 2. Architecture FreeRTOS Optimisée
+- **TaskManager initialisé en priorité** : Le gestionnaire de tâches est maintenant démarré avant les autres composants
+- **Définition claire des priorités** : Hiérarchie des priorités cohérente pour toutes les tâches
+- **Optimisation de la communication inter-tâches** : Files de messages et sémaphores pour une coordination efficace
+
+### 3. Documentation et Standards de Code Améliorés
+- **En-têtes de fichiers standardisés** : Chaque fichier inclut maintenant une section "FONCTIONNEMENT" qui explique le code
+- **Interdépendances documentées** : Les relations entre modules sont clairement documentées
+- **Bonnes pratiques centralisées** : Nouveau fichier best_practices.md pour guider le développement
+
 ## Objectifs du Projet
 
 - **Maximiser la production d'énergie renouvelable** en optimisant les trajectoires de vol du kite
@@ -64,20 +82,6 @@ Cette architecture MCP offre plusieurs avantages pour un projet IoT complexe:
   - 1 Résistance 220Ω (pour la LED)
   - 4 Boutons poussoirs (bleu, vert, rouge, et jaune)
 - **Alimentation** : Via USB ou source externe 5V
-
-## Schéma de connexion
-
-- **Écran LCD 2004 avec module I2C** :
-  - SDA → GPIO21 de l'ESP32
-  - SCL → GPIO22 de l'ESP32
-  - VCC → 5V
-  - GND → GND
-- **LED d'état** :
-  - Anode (+) → GPIO2 via résistance 220Ω
-  - Cathode (-) → GND
-- **Boutons poussoirs** :
-  - Bouton bleu → GPIO15 et GND
-  - Bouton vert → GPIO16 et GND
 
 ## Schéma de connexion optimisé
 
@@ -162,7 +166,7 @@ cd kite_PiloteV3
 code .
 ```
 
-3. Compiler et téléverser le code
+4. Compiler et téléverser le code
 
 ```bash
 # Compiler le projet
@@ -175,7 +179,7 @@ pio run --target upload
 pio device monitor
 ```
 
-4. Après le premier téléversement, les mises à jour suivantes peuvent se faire via OTA en accédant à:
+5. Après le premier téléversement, les mises à jour suivantes peuvent se faire via OTA en accédant à:
 
 ```
 http://[adresse-ip-esp32]/update
@@ -232,6 +236,8 @@ build_flags =
 
 ## Utilisation
 
+### Interface à boutons
+
 1. **Démarrage** : 
    - Au démarrage, le système initialise le module de journalisation
    - Il affiche un message de bienvenue sur l'écran LCD
@@ -239,45 +245,39 @@ build_flags =
    - En cas de succès, l'adresse IP attribuée s'affiche à l'écran
    - L'interface est initialisée avec le menu principal
 
-2. **Interface à boutons** :
-   - **Menu principal** : 
-     - Tableau de bord : Accès aux données et graphiques
-     - Paramètres : Configuration du système
-     - Informations : Statut et version du système
-   - **Navigation** :
-     - Bouton bleu : Retour au menu principal
-     - Bouton vert : Navigation vers le haut
-     - Bouton rouge : Validation/Sélection
-     - Bouton jaune : Navigation vers le bas
+2. **Menu principal** : 
+   - Tableau de bord : Accès aux données et graphiques
+   - Paramètres : Configuration du système
+   - Informations : Statut et version du système
+   
+3. **Navigation** :
+   - Bouton bleu : Retour au menu principal
+   - Bouton vert : Navigation vers le haut
+   - Bouton rouge : Validation/Sélection
+   - Bouton jaune : Navigation vers le bas
 
-3. **Interface web** :
-   - Page d'accueil : `http://[adresse-ip-esp32]/`
-   - Interface de mise à jour OTA : `http://[adresse-ip-esp32]/update`
+### Interface web
 
-4. **Mise à jour OTA** :
-   - Accéder à l'URL de mise à jour dans un navigateur
-   - Sélectionner le nouveau fichier firmware (.bin)
-   - L'écran LCD affiche la progression pendant la mise à jour
+- Page d'accueil : `http://[adresse-ip-esp32]/`
+- Interface de mise à jour OTA : `http://[adresse-ip-esp32]/update`
+- API JSON pour l'accès aux données : `http://[adresse-ip-esp32]/api/status`
 
-5. **Surveillance du système** :
-   - Le système surveille en permanence l'utilisation de la mémoire
-   - Ces informations sont affichées via le système de journalisation
-   - Les erreurs sont clairement marquées dans les logs avec un code couleur
+### Mise à jour OTA
 
-## Simulation avec Wokwi
+- Accéder à l'URL de mise à jour dans un navigateur
+- Sélectionner le nouveau fichier firmware (.bin)
+- L'écran LCD affiche la progression pendant la mise à jour
 
-Le projet inclut les fichiers nécessaires pour une simulation dans l'environnement Wokwi :
+### Surveillance du système
 
-- `diagram.json` : Configuration du circuit et des connexions
-- `wokwi.toml` : Configuration de la simulation
-
-Pour lancer la simulation :
-1. Installer l'extension Wokwi pour VS Code
-2. Ouvrir le projet dans VS Code
-3. Démarrer la simulation avec la commande "Wokwi: Start Simulator"
+- Le système surveille en permanence l'utilisation de la mémoire
+- Ces informations sont affichées via le système de journalisation
+- Les erreurs sont clairement marquées dans les logs avec un code couleur
 
 ## Structure du projet
-/workspaces/kite_PiloteV3/
+
+```
+/kite_PiloteV3/
 ├── include/                      # Fichiers d'en-tête C++
 │   ├── core/                     # Module noyau
 │   │   ├── config.h              # Configuration globale du système
@@ -314,64 +314,39 @@ Pour lancer la simulation :
 │       └── data_storage.h        # Stockage de données
 ├── src/                          # Fichiers source C++
 │   ├── core/                     # Implémentation du noyau
-│   │   ├── config.cpp            # Implémentation configuration
-│   │   ├── task_manager.cpp      # Implémentation gestionnaire tâches
-│   │   ├── main.cpp              # Point d'entrée du programme
-│   │   └── system.cpp            # Implémentation fonctions système
 │   ├── hardware/                 # Implémentation matérielle
-│   │   ├── sensors/              # Implémentation capteurs
-│   │   │   ├── imu.cpp           # Implémentation IMU
-│   │   │   ├── tension.cpp       # Implémentation capteur tension
-│   │   │   ├── wind.cpp          # Implémentation capteur vent
-│   │   │   └── line_length.cpp   # Implémentation capteur longueur
-│   │   └── actuators/            # Implémentation actionneurs
-│   │       ├── servos.cpp        # Implémentation servomoteurs
-│   │       ├── generator.cpp     # Implémentation générateur
-│   │       └── winch.cpp         # Implémentation treuil
 │   ├── communication/            # Implémentation communication
-│   │   ├── espnow_manager.cpp    # Implémentation ESP-NOW
-│   │   ├── wifi_manager.cpp      # Implémentation WiFi
-│   │   └── protocols.cpp         # Implémentation protocoles
 │   ├── control/                  # Implémentation contrôle
-│   │   ├── autopilot.cpp         # Implémentation autopilote
-│   │   ├── pid.cpp               # Implémentation PID
-│   │   ├── trajectory.cpp        # Implémentation trajectoires
-│   │   └── safety.cpp            # Implémentation sécurité
 │   ├── ui/                       # Implémentation UI
-│   │   ├── dashboard.cpp         # Implémentation tableau de bord
-│   │   ├── display.cpp           # Implémentation affichage
-│   │   ├── inputs.cpp            # Implémentation entrées
-│   │   └── webserver.cpp         # Implémentation serveur web
 │   └── utils/                    # Implémentation utilitaires
-│       ├── logging.cpp           # Implémentation journalisation
-│       ├── diagnostics.cpp       # Implémentation diagnostic
-│       ├── terminal.cpp          # Implémentation terminal distant
-│       └── data_storage.cpp      # Implémentation stockage données
 ├── data/                         # Fichiers pour SPIFFS (web)
 │   ├── css/                      # Styles CSS
-│   │   └── style.css             # Feuille de style principale
 │   ├── js/                       # Scripts JavaScript
-│   │   ├── dashboard.js          # Scripts pour tableau de bord
-│   │   └── controls.js           # Scripts pour contrôles
 │   ├── img/                      # Images
-│   │   └── logo.png              # Logo du projet
 │   ├── fonts/                    # Polices
-│   ├── dashboard.html            # Interface principale
-│   ├── config.html               # Page de configuration
-│   ├── diagnostic.html           # Page de diagnostic
-│   └── index.html                # Page d'accueil
+│   └── html/                     # Pages HTML
+├── docs-fr/                      # Documentation
+│   ├── projet_kite_complet.md    # Documentation complète
+│   ├── best_practices.md         # Bonnes pratiques de développement
+│   └── schemas/                  # Diagrammes et schémas
 ├── test/                         # Tests unitaires et d'intégration
-│   ├── test_sensors.cpp          # Tests des capteurs
-│   ├── test_actuators.cpp        # Tests des actionneurs
-│   ├── test_control.cpp          # Tests des algorithmes de contrôle
-│   └── test_communication.cpp    # Tests de communication
-├── lib/                          # Bibliothèques externes
 ├── platformio.ini                # Configuration PlatformIO
-└── docs-fr/                      # Documentation
-    ├── projet_kite_complet.md    # Documentation complète
-    ├── manuel_utilisateur.md     # Guide utilisateur
-    ├── guide_developpeur.md      # Guide développeur
-    └── schemas/                  # Diagrammes et schémas
+└── README.md                     # Documentation principale
+```
+
+## Simulation avec Wokwi
+
+Le projet inclut les fichiers nécessaires pour une simulation dans l'environnement Wokwi :
+
+- `diagram.json` : Configuration du circuit et des connexions
+- `wokwi.toml` : Configuration de la simulation
+
+Pour lancer la simulation :
+1. Installer l'extension Wokwi pour VS Code
+2. Ouvrir le projet dans VS Code
+3. Démarrer la simulation avec la commande "Wokwi: Start Simulator"
+
+
 
 ## Optimisations et améliorations
 
@@ -390,30 +365,24 @@ Le projet inclut plusieurs améliorations pour assurer la performance et la stab
    - Protection contre les accès concurrents via sémaphores
    - Mécanisme de messages inter-tâches avec buffers statiques
 
-3. **Gestion optimisée de la mémoire** :
+3. **Approche non-bloquante par machine à états finis (FSM)** :
+   - Remplacement des delay() par des FSM asynchrones
+   - Meilleure réactivité du système
+   - Utilisation optimale des ressources CPU
+   - Modèle standardisé pour toutes les opérations asynchrones
+
+4. **Gestion optimisée de la mémoire** :
    - Utilisation systématique de buffers statiques pour éviter la fragmentation
    - Contrôle strict des allocations dynamiques
    - Surveillance continue de l'utilisation de la heap
    - Vérification des limites pour tous les accès tableau
    - Utilisation de `snprintf` au lieu de concaténations String
 
-4. **Protection contre les corruptions de mémoire** :
-   - Vérifications de validité des pointeurs et indices de tableaux
-   - Gestion des exceptions pour la sécurité des opérations
-   - Actions différées pour les opérations non-critiques
-   - Validation des données avant traitement
-
 5. **Interface web améliorée** :
    - Design moderne et responsive
    - Utilisation de CSS pour une meilleure présentation
    - Génération HTML optimisée (sans SPIFFS)
    - Buffers de taille fixe pour les réponses HTTP
-
-6. **Interface à boutons fiable** :
-   - Anti-rebond matériel et logiciel pour les boutons
-   - Vérifications strictes des limites des tableaux
-   - Elimination des `delay()` bloquants
-   - Navigation intuitive dans les menus LCD
 
 ## Développement
 
@@ -435,51 +404,55 @@ LOG_DEBUG("TAG", "Débogage: Variable x = %f", x);
 logMemoryUsage("TAG");
 ```
 
-### Assistants IA
+### Principe de conception non-bloquant
 
-Le projet utilise des assistants d'intelligence artificielle pour faciliter le développement :
+Un des principes fondamentaux de ce projet est l'utilisation systématique de machines à états finis (FSM) pour remplacer les appels à `delay()`. Cette approche non-bloquante est essentielle pour un système temps réel multitâche.
 
-- **Cline** : Assistant IA intégré utilisé pour l'analyse de code et les suggestions
-- **GitHub Copilot** : Assistant IA pour la génération de code et les recommandations
+**Exemple d'implémentation FSM :**
+```cpp
+// Au lieu de ceci (bloquant) :
+void initDevice() {
+    sendCommand();
+    delay(100);  // Bloque le thread pendant 100ms
+    readResponse();
+    delay(50);   // Bloque à nouveau
+    configure();
+}
 
-Pour interagir efficacement avec ces assistants IA, consultez les instructions dans `.clinerules/prompt01`. Ces instructions incluent des conventions pour formuler les demandes de code et les bonnes pratiques à suivre.
+// Utiliser cette approche (non-bloquante) :
+bool initDevice() {
+    static uint8_t state = 0;
+    static unsigned long lastActionTime = 0;
+    
+    switch (state) {
+        case 0:  // Envoi de la commande
+            sendCommand();
+            lastActionTime = millis();
+            state = 1;
+            return false;  // Pas terminé
+            
+        case 1:  // Attente et lecture de la réponse
+            if (millis() - lastActionTime >= 100) {
+                readResponse();
+                lastActionTime = millis();
+                state = 2;
+            }
+            return false;  // Pas terminé
+            
+        case 2:  // Attente et configuration
+            if (millis() - lastActionTime >= 50) {
+                configure();
+                state = 0;  // Réinitialisation pour le prochain appel
+                return true;  // Terminé
+            }
+            return false;  // Pas terminé
+    }
+    
+    return false;
+}
+```
 
-### Bonnes pratiques
-
-Le projet suit les conventions de codage définies dans `/docs-fr/`. Quelques principes clés :
-
-- Utiliser le français pour les commentaires
-- Indentation de 2 espaces
-- Éviter les `delay()` bloquants, préférer `millis()` ou les fonctions FreeRTOS
-- Utiliser des buffers statiques plutôt que des allocations dynamiques
-- Toujours vérifier les limites des tableaux avant d'y accéder
-- Préférer `snprintf()` aux concaténations de chaînes
-- Diviser le code en petites fonctions à responsabilité unique
-- Vérifier l'utilisation mémoire régulièrement
-- Protéger les accès concurrents avec des sémaphores
-
-### Architecture logicielle
-
-- **Système de journalisation** :
-  - Gestion des niveaux de logs (ERROR, WARNING, INFO, DEBUG)
-  - Formatage avec horodatage et codes couleur
-  - Surveillance de l'utilisation mémoire
-- **Architecture multitâche** : 
-  - Tâche d'affichage (core 1, priorité élevée)
-  - Tâche de gestion des boutons (core 1, priorité élevée)
-  - Tâche de surveillance WiFi (core 0, priorité basse)
-  - Tâche de surveillance système (core 0, priorité basse)
-- **Communication inter-tâches** :
-  - File d'attente de messages avec buffers statiques
-  - Sémaphores pour la synchronisation
-- **Interface utilisateur tactile** :
-  - Système de menus avec écrans multiples
-  - Mécanisme d'action différée pour éviter les corruptions mémoire
-  - Vérifications strictes des limites
-- **Gestion mémoire optimisée** :
-  - Buffers statiques prédimensionnés
-  - Allocation statique prioritaire
-  - Surveillance continue de l'utilisation heap
+Consultez le fichier `docs-fr/best_practices.md` pour plus d'informations sur l'implémentation de FSM.
 
 ## Dépannage
 
@@ -491,6 +464,7 @@ Le projet suit les conventions de codage définies dans `/docs-fr/`. Quelques pr
 - **Connexion WiFi impossible** : Vérifier les identifiants dans le fichier config.h
 - **Port série sans affichage** : S'assurer que la vitesse est configurée à 115200 bauds
 - **Corruption de heap** : Utiliser le système de journalisation pour identifier l'utilisation mémoire excessive
+- **Opérations bloquantes** : Vérifier que toutes les fonctions longues utilisent une approche FSM non-bloquante
 
 ### Utilisation des journaux
 
@@ -512,6 +486,9 @@ Les contributions sont bienvenues. Merci de suivre ces étapes :
 4. Push sur la branche (`git push origin feature/amazing-feature`)
 5. Ouverture d'une Pull Request
 
+### Règles de codage
+Le projet suit des règles de codage strictes documentées dans `promptkite.prompt.md` et `docs-fr/best_practices.md`. Veillez à les consulter avant de contribuer.
+
 ## Licence
 
 Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
@@ -529,14 +506,14 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 
 ## Date de dernière mise à jour
 
-1 mai 2025
+7 mai 2025
 
 # Instructions pour les Interactions Futures
 
 ## Contexte du Projet
 
-- **Date actuelle** : 6 mai 2025
-- **Système d'exploitation** : Linux
+- **Date actuelle** : 7 mai 2025
+- **Système d'exploitation** : Windows
 - **Structure du projet** :
   - Le projet est organisé en plusieurs dossiers : `src`, `include`, `docs-fr`, `data`, etc.
   - Les fichiers principaux incluent des modules pour la communication, le contrôle, le matériel, l'interface utilisateur et les utilitaires.
@@ -548,36 +525,20 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
    - Toute modification doit respecter l'architecture existante du projet.
    - Les fichiers doivent être placés dans les dossiers appropriés (ex : `src/communication` pour les modules de communication).
 
-2. **Documentation** :
+2. **Approche non-bloquante** :
+   - Utiliser systématiquement des machines à états finis (FSM) au lieu de delay()
+   - Documenter clairement les états et transitions des FSM
+   - Vérifier que toutes les opérations asynchrones suivent cette approche
+
+3. **Documentation** :
    - Ajouter des commentaires clairs et descriptifs pour chaque modification.
    - Mettre à jour la documentation dans `docs-fr` si nécessaire.
+   - Suivre le format standardisé pour les en-têtes de fichiers
 
-3. **Tests** :
+4. **Tests** :
    - Vérifier que les tests dans le dossier `test/` couvrent les nouvelles fonctionnalités ou corrections.
    - Ajouter de nouveaux tests si nécessaire.
-
-4. **Gestion Git** :
-   - Utiliser les tâches Git disponibles pour ajouter, valider et pousser les modifications.
-   - Respecter les conventions de commit (ex : `[Feature] Ajout d'une nouvelle fonctionnalité`).
 
 5. **Collaboration** :
    - Toutes les interactions doivent être basées sur le contexte actuel du projet.
    - Les réponses doivent être précises, concises et adaptées au projet.
-
-## Utilisation des Outils
-
-- **Exploration du Projet** :
-  - Utiliser les outils disponibles pour rechercher, lire ou modifier les fichiers.
-  - S'assurer que les modifications sont conformes aux bonnes pratiques.
-
-- **Exécution des Tâches** :
-  - Utiliser les tâches prédéfinies pour gérer les interactions avec Git.
-  - Vérifier l'état du projet après chaque modification.
-
-- **Communication** :
-  - Fournir des explications détaillées pour chaque action ou modification.
-  - Répondre aux questions en utilisant le contexte du projet.
-
-## Objectif
-
-L'objectif est de garantir que toutes les interactions futures respectent les directives ci-dessus et contribuent à l'amélioration continue du projet.

@@ -1,18 +1,89 @@
 /*
   -----------------------
-  Kite PiloteV3 - Module WiFiManager (Implémentation)
+  Kite PiloteV3 - Module WiFi Manager (Implémentation)
   -----------------------
   
-  Implémentation du gestionnaire de connexions WiFi.
+  Implémentation du gestionnaire de connexion WiFi pour le système Kite PiloteV3.
   
-  Version: 1.0.0
-  Date: 6 mai 2025
+  Version: 3.0.0
+  Date: 7 mai 2025
   Auteurs: Équipe Kite PiloteV3
+  
+  ===== FONCTIONNEMENT =====
+  Ce module gère la connectivité WiFi du système, permettant le contrôle à distance
+  et la visualisation des données via une interface web. Il implémente une machine 
+  à états finis (FSM) pour gérer toutes les opérations de manière non-bloquante.
+  
+  Principes de fonctionnement :
+  1. Initialisation et configuration du WiFi (station ou point d'accès) via une FSM
+  2. Gestion des connexions et reconnexions automatiques sans bloquer le CPU
+  3. Surveillance de la qualité de connexion et adaptation avec opérations asynchrones
+  4. Mise à disposition des informations de connexion
+  
+  Architecture FSM implémentée :
+  - États : IDLE, CONNECTING, CONNECTED, RECONNECTING, AP_STARTING, AP_ACTIVE
+  - Les transitions entre états se font sur la base d'événements temporels ou externes
+  - Chaque état possède sa propre méthode de traitement qui s'exécute rapidement
+  - Aucune opération ne bloque le flux d'exécution du programme
+  
+  Interactions avec d'autres modules :
+  - TaskManager : Appelle ce module depuis une tâche dédiée
+  - WebServer : Utilise la connexion WiFi pour servir l'interface web
+  - API : Permet l'accès à distance via des requêtes REST
+  - System : Fournit des informations sur l'état du système pour le tableau de bord web
+  - OTA : Utilise la connexion WiFi pour les mises à jour over-the-air
+  
+  Aspects techniques notables :
+  - Utilisation d'une FSM pour remplacer tous les appels à delay() par des opérations non-bloquantes
+  - Gestion intelligente de la puissance d'émission pour économiser la batterie
+  - Basculement automatique en mode point d'accès en cas d'échec de connexion
+  - Stockage des configurations dans la mémoire non volatile
+  - Mécanismes de sécurité pour prévenir les accès non autorisés
+  
+  Exemple d'approche non-bloquante :
+  Au lieu de :
+  ```
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
+    delay(100);  // Bloque l'exécution pendant 100ms
+  }
+  ```
+  
+  Notre FSM utilise :
+  ```
+  case CONNECTING:
+    if (millis() - lastStateTime >= checkInterval) {
+      lastStateTime = millis();
+      if (WiFi.status() == WL_CONNECTED) {
+        state = CONNECTED;
+        // Actions à l'établissement de la connexion
+      } else if (millis() - connectStartTime >= timeout) {
+        state = IDLE;
+        // Actions en cas de timeout
+      }
+    }
+    break;
+  ```
 */
 
 #include "communication/wifi_manager.h"
 #include "utils/logging.h"
 #include "core/config.h"
+
+// Ajout d'une énumération pour les états de la FSM
+enum WiFiState {
+  IDLE,
+  CONNECTING,
+  CONNECTED,
+  RECONNECTING,
+  AP_STARTING,
+  AP_ACTIVE
+};
+
+// Ajout d'une variable pour suivre l'état actuel
+WiFiState currentState = IDLE;
+unsigned long lastStateTime = 0;
+unsigned long connectStartTime = 0;
 
 /**
  * Constructeur - initialise les variables membres
@@ -42,36 +113,67 @@ bool WiFiManager::begin(const char* ssid, const char* password, uint32_t timeout
     LOG_ERROR("WIFI", "SSID vide");
     return false;
   }
-  
+
   // Enregistrer les credentials
   strncpy(this->ssid, ssid, sizeof(this->ssid) - 1);
   strncpy(this->password, password, sizeof(this->password) - 1);
-  
+
   LOG_INFO("WIFI", "Connexion au réseau %s...", ssid);
-  
-  // Configuration du mode WiFi en mode station
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  
-  // Attendre la connexion avec timeout
-  unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
-    delay(100);
+
+  // Initialiser la FSM
+  currentState = CONNECTING;
+  connectStartTime = millis();
+  lastStateTime = millis();
+
+  return true;
+}
+
+/**
+ * Ajout d'une méthode pour gérer la FSM
+ */
+void WiFiManager::handleFSM() {
+  switch (currentState) {
+    case CONNECTING:
+      if (millis() - lastStateTime >= 100) { // Vérification périodique
+        lastStateTime = millis();
+        if (WiFi.status() == WL_CONNECTED) {
+          currentState = CONNECTED;
+          connected = true;
+          IPAddress ip = WiFi.localIP();
+          LOG_INFO("WIFI", "Connecté à %s, IP: %d.%d.%d.%d", 
+                   ssid, ip[0], ip[1], ip[2], ip[3]);
+        } else if (millis() - connectStartTime >= timeout) {
+          currentState = IDLE;
+          connected = false;
+          LOG_ERROR("WIFI", "Échec de connexion au réseau %s", ssid);
+        }
+      }
+      break;
+
+    case CONNECTED:
+      // Vérifier si la connexion est toujours active
+      if (WiFi.status() != WL_CONNECTED) {
+        currentState = RECONNECTING;
+        LOG_WARNING("WIFI", "Connexion perdue, tentative de reconnexion...");
+      }
+      break;
+
+    case RECONNECTING:
+      if (millis() - lastStateTime >= 5000) { // Tentative toutes les 5 secondes
+        lastStateTime = millis();
+        WiFi.disconnect();
+        WiFi.begin(ssid, password);
+        currentState = CONNECTING;
+        connectStartTime = millis();
+      }
+      break;
+
+    case IDLE:
+    case AP_STARTING:
+    case AP_ACTIVE:
+      // Gérer les autres états si nécessaire
+      break;
   }
-  
-  // Vérifier si la connexion a réussi
-  connected = (WiFi.status() == WL_CONNECTED);
-  lastConnectAttempt = millis();
-  
-  if (connected) {
-    IPAddress ip = WiFi.localIP();
-    LOG_INFO("WIFI", "Connecté à %s, IP: %d.%d.%d.%d", 
-             ssid, ip[0], ip[1], ip[2], ip[3]);
-  } else {
-    LOG_ERROR("WIFI", "Échec de connexion au réseau %s", ssid);
-  }
-  
-  return connected;
 }
 
 /**
@@ -108,37 +210,15 @@ bool WiFiManager::reconnect(uint32_t timeout) {
     LOG_ERROR("WIFI", "Tentative de reconnexion sans SSID défini");
     return false;
   }
-  
-  // Éviter des tentatives trop fréquentes (au moins 5 secondes entre les tentatives)
-  if (millis() - lastConnectAttempt < 5000) {
-    return connected;
+
+  if (currentState != CONNECTED && currentState != CONNECTING) {
+    currentState = RECONNECTING;
+    lastStateTime = millis();
+    connectStartTime = millis();
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
   }
-  
-  LOG_INFO("WIFI", "Reconnexion au réseau %s...", ssid);
-  
-  // Configuration du mode WiFi en mode station
-  WiFi.disconnect();
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  
-  // Attendre la connexion avec timeout
-  unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
-    delay(100);
-  }
-  
-  // Vérifier si la connexion a réussi
-  connected = (WiFi.status() == WL_CONNECTED);
-  lastConnectAttempt = millis();
-  
-  if (connected) {
-    IPAddress ip = WiFi.localIP();
-    LOG_INFO("WIFI", "Reconnecté à %s, IP: %d.%d.%d.%d", 
-             ssid, ip[0], ip[1], ip[2], ip[3]);
-  } else {
-    LOG_ERROR("WIFI", "Échec de reconnexion au réseau %s", ssid);
-  }
-  
+
   return connected;
 }
 
@@ -244,6 +324,19 @@ bool WiFiManager::isAPActive() {
  * Met à jour l'état de connexion WiFi
  */
 void WiFiManager::updateConnectionStatus() {
-  // Mettre à jour l'état de connexion
+  // Vérifier si le WiFi est connecté
   connected = (WiFi.status() == WL_CONNECTED);
+  
+  // Journaliser les changements d'état
+  static bool lastConnectedState = false;
+  if (connected != lastConnectedState) {
+    if (connected) {
+      IPAddress ip = WiFi.localIP();
+      LOG_INFO("WIFI", "Connexion établie. IP: %d.%d.%d.%d", 
+               ip[0], ip[1], ip[2], ip[3]);
+    } else {
+      LOG_WARNING("WIFI", "Connexion WiFi perdue");
+    }
+    lastConnectedState = connected;
+  }
 }

@@ -38,7 +38,6 @@ bool imuInit(TwoWire &wirePort) {
     }
     
     wirePort.begin();
-    mpu6050.setWire(wirePort);
     mpu6050.begin();
     mpu6050.calcGyroOffsets(true);
     LOG_INFO("IMU", "MPU6050 initialisé et calibré");
@@ -46,6 +45,7 @@ bool imuInit(TwoWire &wirePort) {
     imuInitialized = true;
     return true;
 }
+
 
 /**
  * Lit les données de l'IMU
@@ -87,8 +87,8 @@ IMUCalibrationState imuCalibrate(bool autoMode) {
     
     if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         // Simulation de calibration
+// No change needed here
         LOG_INFO("IMU", "Calibration de l'IMU réussie");
-        currentIMUData.isCalibrated = true;
         result = IMU_CALIBRATED;
         xSemaphoreGive(imuMutex);
     } else {
@@ -107,7 +107,8 @@ IMUCalibrationState imuGetCalibrationState() {
         return IMU_NOT_CALIBRATED;
     }
     
-    if (currentIMUData.isCalibrated) {
+// No change needed here
+    if (currentIMUData.dataValid) {
         return IMU_CALIBRATED;
     }
     
@@ -131,7 +132,7 @@ bool imuResetReference(bool setYawToZero) {
     if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         // Simulation de réinitialisation
         if (setYawToZero) {
-            currentIMUData.yaw = 0;
+            currentIMUData.orientation[2] = 0;
         }
         LOG_INFO("IMU", "Réinitialisation de la référence IMU réussie");
         result = true;
@@ -210,18 +211,18 @@ bool updateIMU() {
     
     if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         mpu6050.update();
-        currentIMUData.roll = mpu6050.getAngleX();
-        currentIMUData.pitch = mpu6050.getAngleY();
-        currentIMUData.yaw = mpu6050.getAngleZ();
-        currentIMUData.rollRate = mpu6050.getGyroX();
-        currentIMUData.pitchRate = mpu6050.getGyroY();
-        currentIMUData.yawRate = mpu6050.getGyroZ();
-        currentIMUData.accelX = mpu6050.getAccX();
-        currentIMUData.accelY = mpu6050.getAccY();
-        currentIMUData.accelZ = mpu6050.getAccZ();
+         currentIMUData.orientation[1] = mpu6050.getAngleX(); // roll
+         currentIMUData.orientation[0] = mpu6050.getAngleY(); // pitch
+         currentIMUData.orientation[2] = mpu6050.getAngleZ(); // yaw
+         currentIMUData.gyro[0] = mpu6050.getGyroX();
+         currentIMUData.gyro[1] = mpu6050.getGyroY();
+         currentIMUData.gyro[2] = mpu6050.getGyroZ();
+         currentIMUData.accel[0] = mpu6050.getAccX();
+         currentIMUData.accel[1] = mpu6050.getAccY();
+         currentIMUData.accel[2] = mpu6050.getAccZ();
         currentIMUData.timestamp = millis();
-        currentIMUData.isCalibrated = true;
-        currentIMUData.accuracy = 3;
+// No change needed here
+        currentIMUData.dataValid = true;
         
         result = true;
         xSemaphoreGive(imuMutex);
