@@ -46,3 +46,6 @@ private:
     // Méthodes privées
     void updateConnectionStatus();
 };
+
+// Déclaration explicite de la fonction wifiManagerInit
+void wifiManagerInit();

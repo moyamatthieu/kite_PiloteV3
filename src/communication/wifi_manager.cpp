@@ -69,6 +69,7 @@
 #include "communication/wifi_manager.h"
 #include "utils/logging.h"
 #include "core/config.h"
+#include <WiFi.h>
 
 // Ajout d'une énumération pour les états de la FSM
 enum WiFiState {
@@ -339,4 +340,24 @@ void WiFiManager::updateConnectionStatus() {
     }
     lastConnectedState = connected;
   }
+}
+
+/**
+ * Initialise le module WiFi - à appeler au démarrage
+ */
+void wifiManagerInit() {
+    LOG_INFO("WIFI", "Connexion au réseau %s...", WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
+        delay(200);
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        LOG_INFO("WIFI", "Connecté avec succès, IP: %s", WiFi.localIP().toString().c_str());
+    } else {
+        LOG_ERROR("WIFI", "Échec de connexion au réseau");
+    }
 }

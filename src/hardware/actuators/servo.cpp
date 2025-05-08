@@ -65,32 +65,26 @@
 #include "hardware/actuators/servo.h"
 #include "utils/logging.h"
 
-// Approche spécifique pour Wokwi - simplifie la gestion des servomoteurs
-#ifdef WOKWI_SIMULATION
-#include <Servo.h>
+// Variables pour les servomoteurs (déclarées en tant que globales)
+Servo directionServo;
+Servo trimServo;
+Servo lineModServo;
 
-// Variables directement accessibles pour simplifier le débogage
-Servo servoDirection;
-Servo servoTrim;
-Servo servoLine;
+// Variables d'état
+static bool servosInitialized = false;
+static unsigned long lastServoUpdateTime = 0;
+static int initState = 0;
+static unsigned long lastActionTime = 0;
+static int currentTimer = 0;
 
-// Fonction d'initialisation simplifiée optimisée pour Wokwi
-void setupWokwiServos() {
-  // Attacher directement les servos aux broches
-  servoDirection.attach(SERVO_DIRECTION_PIN);
-  servoTrim.attach(SERVO_TRIM_PIN);
-  servoLine.attach(SERVO_LINEMOD_PIN);
-  
-  // Position initiale au centre
-  servoDirection.write(90);
-  servoTrim.write(90);
-  servoLine.write(90);
-  
-  LOG_INFO("WOKWI", "Servomoteurs initialisés directement pour Wokwi");
-}
-
-// Fonction de mise à jour simplifiée pour Wokwi
-void updateWokwiServos(int direction, int trim, int linePos) {
+/**
+ * Initialisation de tous les servomoteurs
+ * Utilise une machine à états finis pour éviter les blocages
+ * @return true si l'initialisation est terminée avec succès, false sinon
+ */
+bool servoInitAll() {
+  // Machine à états finie pour initialisation non-bloquante
+  unsigned long currentTime = millis();
   static int availableTimers[4] = {-1, -1, -1, -1};
   static int numAvailableTimers = 0;
   static int allocatedTimers = 0;
@@ -98,9 +92,6 @@ void updateWokwiServos(int direction, int trim, int linePos) {
   static bool dirOk = false;
   static bool trimOk = false;
   static bool lineModOk = false;
-  
-  // Machine à états finie pour initialisation non-bloquante
-  unsigned long currentTime = millis();
   
   // Réinitialisation complète de l'état pour éviter les problèmes
   if (initState == 0) {
@@ -478,4 +469,26 @@ bool servoIsAttached(uint8_t servoIndex) {
     default:
       return false;
   }
+}
+
+void servoInitialize() {
+    pinMode(SERVO_DIRECTION_PIN, OUTPUT);
+    pinMode(SERVO_TRIM_PIN, OUTPUT);
+
+    ledcSetup(0, SERVO_FREQUENCY, 8);
+    ledcAttachPin(SERVO_DIRECTION_PIN, 0);
+
+    ledcSetup(1, SERVO_FREQUENCY, 8);
+    ledcAttachPin(SERVO_TRIM_PIN, 1);
+
+    LOG_INFO("SERVO", "Servomoteurs initialisés");
+}
+
+// Déplacement des vérifications des servos depuis `system.cpp`.
+bool servoCheckHealth() {
+    if (!servoIsAttached(0) || !servoIsAttached(1) || !servoIsAttached(2)) {
+        LOG_WARNING("SERVO", "Un ou plusieurs servos ne sont pas attachés. Tentative de récupération...");
+        return servoReinitialize();
+    }
+    return true;
 }

@@ -10,6 +10,7 @@ public:
     void control(float tension);
     void stop();
     void update();
+    void checkHealth(); // Vérifie l'état de santé du treuil
 private:
     float currentTension;
 };

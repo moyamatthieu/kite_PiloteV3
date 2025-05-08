@@ -52,6 +52,8 @@
 #include "hardware/sensors/tension.h"
 #include "hardware/sensors/wind.h"
 #include "hardware/actuators/servo.h"
+#include "control/autopilot.h"  // Pour autopilotInit
+#include "core/system.h"        // Pour systemHealthCheck
 
 /* === MODULE TASK MANAGER ===
    Implémentation du gestionnaire de tâches FreeRTOS pour le système Kite PiloteV3.
@@ -65,13 +67,19 @@
 static TaskDefinition tasks[MAX_TASKS]; // Tableau des tâches gérées
 static int taskCount = 0;              // Nombre de tâches ajoutées
 
-// Déclaration des variables statiques de la classe TaskManager
+// Initialisation des handles statiques de la classe TaskManager
 UIManager* TaskManager::uiManager = nullptr;
 WiFiManager* TaskManager::wifiManager = nullptr;
 QueueHandle_t TaskManager::messageQueue = nullptr;
 SemaphoreHandle_t TaskManager::displayMutex = nullptr;
-TaskHandle_t TaskManager::displayTaskHandle = nullptr;  // Initialisation du handle de tâche d'affichage
-TaskHandle_t TaskManager::buttonTaskHandle = nullptr;   // Initialisation du handle de tâche des boutons
+
+// Initialisation des handles des tâches
+TaskHandle_t TaskManager::displayTaskHandle = nullptr;
+TaskHandle_t TaskManager::buttonTaskHandle = nullptr;
+TaskHandle_t TaskManager::inputTaskHandle = nullptr;
+TaskHandle_t TaskManager::networkTaskHandle = nullptr;
+TaskHandle_t TaskManager::controlTaskHandle = nullptr;
+TaskHandle_t TaskManager::sensorTaskHandle = nullptr;
 
 // Handle pour la tâche de monitoring
 TaskHandle_t monitorTaskHandle = nullptr;
@@ -203,13 +211,16 @@ bool TaskManager::startTasks() {
     // Démarrage des tâches principales 
     BaseType_t result;
     
-    // Tâche d'affichage avec priorité inférieure
+    // Ajout d'un petit délai entre les créations de tâches
+    vTaskDelay(pdMS_TO_TICKS(10));
+    
+    // Tâche d'affichage (écran) - priorité élevée
     result = xTaskCreate(
         displayTask,
         "Display",
         DISPLAY_TASK_STACK_SIZE,
         nullptr,
-        1,  // Priorité basse (1-24, 24 étant la plus élevée)
+        DISPLAY_TASK_PRIORITY,
         &displayTaskHandle
     );
     
@@ -218,33 +229,85 @@ bool TaskManager::startTasks() {
         return false;
     }
     
-    // Ajout d'un petit délai entre les créations de tâches
+    // Ajout d'un petit délai pour la synchronisation des logs
     vTaskDelay(pdMS_TO_TICKS(10));
     
-    // Tâche des boutons avec priorité moyenne
+    // Tâche des boutons
     result = xTaskCreate(
         buttonTask,
-        "Buttons", 
-        POT_TASK_STACK_SIZE,
+        "Buttons",
+        BUTTON_TASK_STACK_SIZE,
         nullptr,
-        2,  // Priorité moyenne
+        BUTTON_TASK_PRIORITY,
         &buttonTaskHandle
     );
     
     if (result != pdPASS) {
         LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche des boutons");
-        // Nettoyer la tâche précédemment créée
-        if (displayTaskHandle != nullptr) {
-            vTaskDelete(displayTaskHandle);
-            displayTaskHandle = nullptr;
-        }
         return false;
     }
     
-    // Ajout d'un petit délai entre les créations de tâches
-    vTaskDelay(pdMS_TO_TICKS(10));
+    // Tâche pour les potentiomètres
+    result = xTaskCreate(
+        inputTask,
+        "Input",
+        POT_TASK_STACK_SIZE,
+        nullptr,
+        POT_TASK_PRIORITY,
+        &inputTaskHandle
+    );
     
-    // Tâche de monitoring avec priorité basse
+    if (result != pdPASS) {
+        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche d'entrée");
+        return false;
+    }
+    
+    // Tâche de réseau WiFi
+    result = xTaskCreate(
+        networkTask,
+        "Network",
+        WIFI_TASK_STACK_SIZE,
+        nullptr,
+        WIFI_TASK_PRIORITY,
+        &networkTaskHandle
+    );
+    
+    if (result != pdPASS) {
+        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche réseau");
+        return false;
+    }
+    
+    // Tâche de contrôle
+    result = xTaskCreate(
+        controlTask,
+        "Control",
+        SYSTEM_TASK_STACK_SIZE,
+        nullptr,
+        SYSTEM_TASK_PRIORITY,
+        &controlTaskHandle
+    );
+    
+    if (result != pdPASS) {
+        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche de contrôle");
+        return false;
+    }
+    
+    // Tâche des capteurs
+    result = xTaskCreate(
+        sensorTask,
+        "Sensors",
+        IMU_TASK_STACK_SIZE,
+        nullptr,
+        IMU_TASK_PRIORITY,
+        &sensorTaskHandle
+    );
+    
+    if (result != pdPASS) {
+        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche des capteurs");
+        return false;
+    }
+    
+    // Tâche de monitoring avec priorité basse (dernière à démarrer)
     result = xTaskCreate(
         monitorTask,
         "Monitor",
@@ -256,28 +319,14 @@ bool TaskManager::startTasks() {
     
     if (result != pdPASS) {
         LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche de monitoring");
-        // Nettoyer les tâches précédemment créées
-        if (displayTaskHandle != nullptr) {
-            vTaskDelete(displayTaskHandle);
-            displayTaskHandle = nullptr;
-        }
-        if (buttonTaskHandle != nullptr) {
-            vTaskDelete(buttonTaskHandle);
-            buttonTaskHandle = nullptr;
-        }
         return false;
     }
     
-    // Ajout d'un petit délai pour la synchronisation des logs
+    // Ajout d'un petit délai pour éviter les chevauchements de logs
     vTaskDelay(pdMS_TO_TICKS(10));
-    
-    // D'autres tâches peuvent être ajoutées ici au besoin
     
     tasksRunning = true;
     LOG_INFO("TASK_MANAGER", "Toutes les tâches ont été démarrées");
-    
-    // Ajout d'un petit délai pour éviter les chevauchements de logs
-    vTaskDelay(pdMS_TO_TICKS(10));
     
     return true;
 }
@@ -291,16 +340,6 @@ void TaskManager::stopTasks() {
     }
     
     // Arrêt des tâches
-    if (displayTaskHandle != nullptr) {
-        vTaskDelete(displayTaskHandle);
-        displayTaskHandle = nullptr;
-    }
-    
-    if (buttonTaskHandle != nullptr) {
-        vTaskDelete(buttonTaskHandle);
-        buttonTaskHandle = nullptr;
-    }
-    
     if (monitorTaskHandle != nullptr) {
         vTaskDelete(monitorTaskHandle);
         monitorTaskHandle = nullptr;
@@ -334,142 +373,296 @@ void TaskManager::stopAllTasks() {
 }
 
 /**
- * Fonction pour la tâche d'affichage - mise à jour périodique de l'écran LCD
- */
-void TaskManager::displayTask(void* parameters) {
-    extern DisplayManager display;   // Référence au gestionnaire d'affichage global
-    TickType_t lastWakeTime = xTaskGetTickCount();
-    
-    LOG_INFO("TASK_LCD", "Tâche d'affichage démarrée");
-    
-    for (;;) {
-        // Mise à jour périodique de l'écran toutes les 500 ms
-        display.updateMainDisplay();
-        
-        // Utilisation de vTaskDelayUntil pour une temporisation précise
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(500));
-    }
-}
-
-/**
- * Fonction pour la tâche des boutons - lecture périodique de l'état des boutons
- */
-void TaskManager::buttonTask(void* parameters) {
-    extern ButtonUIManager buttonUI;  // Référence à l'interface de boutons globale
-    extern PotentiometerManager potManager;  // Référence au gestionnaire de potentiomètres global
-    TickType_t lastWakeTime = xTaskGetTickCount();
-    
-    LOG_INFO("TASK_BTN", "Tâche des boutons démarrée");
-    
-    for (;;) {
-        // Lecture de l'état des boutons - utiliser la méthode existante
-        buttonUI.readButton(BUTTON_UP);
-        buttonUI.readButton(BUTTON_DOWN);
-        buttonUI.readButton(BUTTON_SELECT);
-        buttonUI.readButton(BUTTON_BACK);
-        
-        // Lecture des valeurs des potentiomètres individuellement
-        int direction = potManager.getDirection();
-        int trim = potManager.getTrim();
-        int lineLength = potManager.getLineLength();
-        
-        // Convertir les valeurs des potentiomètres (-100..100) aux plages des servomoteurs
-        // Direction: -90..90 degrés
-        // Trim: -45..45 degrés
-        // LineLength: 0..100%
-        int servoDirection = map(direction, -100, 100, DIRECTION_MIN_ANGLE, DIRECTION_MAX_ANGLE);
-        int servoTrim = map(trim, -100, 100, TRIM_MIN_ANGLE, TRIM_MAX_ANGLE);
-        int servoLineModulation = map(lineLength, 0, 100, 0, 100);
-        
-        // Mettre à jour les servomoteurs avec les valeurs des potentiomètres
-        servoUpdateAll(servoDirection, servoTrim, servoLineModulation);
-        
-        // Log pour déboguer (seulement toutes les 20 itérations pour ne pas saturer)
-        static int logCounter = 0;
-        if (++logCounter >= 20) {
-            LOG_DEBUG("SERVO_CTRL", "Mise à jour servos: Dir=%d, Trim=%d, Line=%d", 
-                     servoDirection, servoTrim, servoLineModulation);
-            logCounter = 0;
-        }
-        
-        // Utilisation de vTaskDelayUntil pour une temporisation précise
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(50));
-    }
-}
-
-/**
- * Fonction pour la tâche réseau
- */
-void TaskManager::networkTask(void* parameters) {
-    for (;;) {
-        // Code de la tâche réseau
-        vTaskDelay(pdMS_TO_TICKS(200));
-    }
-}
-
-/**
- * Fonction pour la tâche de contrôle
- */
-void TaskManager::controlTask(void* parameters) {
-    for (;;) {
-        // Code de la tâche de contrôle
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-}
-
-/**
- * Fonction pour la tâche d'entrée
- */
-void TaskManager::inputTask(void* parameters) {
-    for (;;) {
-        // Code de la tâche d'entrée
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
-
-/**
  * Fonction pour la tâche de surveillance
  */
 void TaskManager::monitorTask(void* parameters) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     unsigned long counter = 0;
-    
+
     LOG_INFO("TASK_MON", "Tâche de monitoring démarrée");
-    
+
     for (;;) {
-        // Envoi de logs périodiques pour vérifier que la communication série fonctionne
         counter++;
         LOG_INFO("MONITOR", "Surveillance système active (cycle #%lu)", counter);
-        
+
         // Vérification de l'état des tâches principales
         if (displayTaskHandle != nullptr) {
             LOG_DEBUG("MONITOR", "Tâche d'affichage: active");
         }
-        
+
         if (buttonTaskHandle != nullptr) {
             LOG_DEBUG("MONITOR", "Tâche des boutons: active");
         }
-        
+
         // Journalisation de l'utilisation mémoire
         logMemoryUsage("MONITOR");
-        
-        // Toutes les 10 itérations, afficher un graphique mémoire
-        if (counter % 10 == 0) {
-            logMemoryGraph();
-        }
-        
-        // Utilisation de vTaskDelayUntil pour une temporisation précise (5 secondes)
+
+        // Temporisation précise avec vTaskDelayUntil
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(5000));
     }
 }
 
 /**
+ * Fonction pour la tâche d'affichage
+ * Gère l'écran LCD et les mises à jour d'interface
+ */
+void TaskManager::displayTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    unsigned long updateCounter = 0;
+    bool uiReady = false;
+
+    LOG_INFO("DISPLAY", "Tâche d'affichage démarrée");
+
+    // Attendre que l'interface utilisateur soit prête (avec timeout)
+    for (int attempt = 0; attempt < 10; attempt++) {
+        if (uiManager && uiManager->isInitialized()) {
+            uiReady = true;
+            LOG_INFO("DISPLAY", "Interface utilisateur trouvée et initialisée");
+            break;
+        }
+        LOG_WARNING("DISPLAY", "Interface utilisateur non prête, attente (%d/10)", attempt + 1);
+        vTaskDelay(pdMS_TO_TICKS(100)); // Attendre 100ms avant la prochaine tentative
+    }
+
+    if (!uiReady) {
+        LOG_ERROR("DISPLAY", "Interface utilisateur non initialisée après plusieurs tentatives");
+        // Ne pas quitter la tâche, essayer quand même avec des vérifications à chaque cycle
+    }
+
+    // Boucle principale de la tâche
+    for (;;) {
+        updateCounter++;
+        
+        // Vérifier à nouveau si l'UI est prête
+        if (!uiReady && uiManager && uiManager->isInitialized()) {
+            uiReady = true;
+            LOG_INFO("DISPLAY", "Interface utilisateur désormais disponible");
+        }
+        
+        // Mettre à jour l'écran LCD à intervalle régulier si l'UI est prête
+        if (uiReady) {
+            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                // Mise à jour de l'affichage
+                uiManager->updateDisplay();
+                xSemaphoreGive(displayMutex);
+            }
+        }
+
+        // Log périodique pour vérifier l'activité
+        if (updateCounter % 100 == 0) {
+            if (uiReady) {
+                LOG_DEBUG("DISPLAY", "Mise à jour d'affichage #%lu (UI prête)", updateCounter);
+            } else {
+                LOG_WARNING("DISPLAY", "Mise à jour d'affichage #%lu (UI non prête)", updateCounter);
+                
+                // Nouvelle tentative de récupération de l'UI
+                if (uiManager && uiManager->isInitialized()) {
+                    uiReady = true;
+                    LOG_INFO("DISPLAY", "Interface utilisateur récupérée");
+                }
+            }
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(DISPLAY_UPDATE_INTERVAL));
+    }
+}
+
+/**
+ * Fonction pour la tâche des boutons
+ * Gère la lecture des boutons et les interactions utilisateur
+ */
+void TaskManager::buttonTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    unsigned long scanCounter = 0;
+
+    LOG_INFO("BUTTONS", "Tâche des boutons démarrée");
+
+    // Vérifier si l'interface utilisateur a été correctement initialisée
+    if (!uiManager) {
+        LOG_ERROR("BUTTONS", "Interface utilisateur non initialisée");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Boucle principale de la tâche
+    for (;;) {
+        scanCounter++;
+        
+        // Scanner les boutons et mettre à jour l'état
+        uiManager->checkButtons();
+        
+        // Log périodique pour vérifier l'activité
+        if (scanCounter % 200 == 0) {
+            LOG_DEBUG("BUTTONS", "Cycle de scan des boutons #%lu", scanCounter);
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(BUTTON_CHECK_INTERVAL));
+    }
+}
+
+/**
+ * Fonction pour la tâche d'entrée (potentiomètres)
+ * Gère la lecture des potentiomètres et l'état des entrées analogiques
+ */
+void TaskManager::inputTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    static PotentiometerManager potManager;
+    unsigned long readCounter = 0;
+
+    LOG_INFO("INPUT", "Tâche des potentiomètres démarrée");
+
+    // Initialisation des potentiomètres
+    potManager.begin();
+
+    // Boucle principale de la tâche
+    for (;;) {
+        readCounter++;
+        
+        // Lire les potentiomètres et mettre à jour l'état
+        potManager.updatePotentiometers();
+        
+        // Vérifier si le mode pilote automatique doit être désactivé
+        potManager.checkAutoPilotStatus();
+        
+        // Log périodique pour vérifier l'activité
+        if (readCounter % 100 == 0) {
+            LOG_DEBUG("INPUT", "Lecture des potentiomètres #%lu - Dir: %d, Trim: %d, Longueur: %d", 
+                      readCounter, potManager.getDirection(), potManager.getTrim(), potManager.getLineLength());
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(POT_READ_INTERVAL));
+    }
+}
+
+/**
+ * Fonction pour la tâche réseau
+ * Gère les connexions WiFi et les communications réseau
+ */
+void TaskManager::networkTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    unsigned long cycleCounter = 0;
+
+    LOG_INFO("NETWORK", "Tâche réseau démarrée");
+
+    // Vérifier si le gestionnaire WiFi a été correctement initialisé
+    if (!wifiManager) {
+        LOG_ERROR("NETWORK", "Gestionnaire WiFi non initialisé");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Boucle principale de la tâche
+    for (;;) {
+        cycleCounter++;
+        
+        // Gérer la machine à états du WiFi
+        wifiManager->handleFSM();
+        
+        // Log périodique pour vérifier l'activité
+        if (cycleCounter % 50 == 0) {
+            bool connected = wifiManager->isConnected();
+            if (connected) {
+                LOG_DEBUG("NETWORK", "WiFi connecté (%lu)", cycleCounter);
+            } else {
+                LOG_DEBUG("NETWORK", "WiFi déconnecté (%lu)", cycleCounter);
+            }
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(WIFI_CHECK_INTERVAL));
+    }
+}
+
+/**
+ * Fonction pour la tâche de contrôle
+ * Gère la logique de contrôle principale du système
+ */
+void TaskManager::controlTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    unsigned long controlCounter = 0;
+
+    LOG_INFO("CONTROL", "Tâche de contrôle démarrée");
+
+    // Initialiser l'autopilote
+    autopilotInit();
+
+    // Boucle principale de la tâche
+    for (;;) {
+        controlCounter++;
+        
+        // Exécuter la boucle de contrôle principale
+        
+        // Vérification des conditions de sécurité
+        if (controlCounter % 20 == 0) {
+            // Vérifier l'état du système toutes les 20 itérations
+            systemHealthCheck();
+        }
+        
+        // Log périodique pour vérifier l'activité
+        if (controlCounter % 100 == 0) {
+            LOG_DEBUG("CONTROL", "Cycle de contrôle #%lu", controlCounter);
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(20)); // 50Hz
+    }
+}
+
+/**
  * Fonction pour la tâche des capteurs
+ * Gère la lecture et le traitement des données des capteurs
  */
 void TaskManager::sensorTask(void* parameters) {
+    TickType_t lastWakeTime = xTaskGetTickCount();
+    unsigned long sensorCounter = 0;
+    bool imuInitialized = false;
+    IMUData currentImuData;
+
+    LOG_INFO("SENSORS", "Tâche des capteurs démarrée");
+
+    // Initialisation de l'IMU avec une configuration par défaut
+    imuInitialized = imuInit(nullptr);
+    if (!imuInitialized) {
+        LOG_ERROR("SENSORS", "Échec d'initialisation de l'IMU");
+        // Continuer quand même, l'IMU pourrait être connecté plus tard
+    }
+
+    // Boucle principale de la tâche
     for (;;) {
-        // Code de la tâche des capteurs
-        vTaskDelay(pdMS_TO_TICKS(100));
+        sensorCounter++;
+        
+        // Lecture et mise à jour des capteurs
+        if (imuInitialized) {
+            // Mise à jour des données de l'IMU
+            imuReadProcessedData(&currentImuData);
+        } else if (sensorCounter % 100 == 0) {
+            // Tentative de réinitialisation périodique si l'IMU n'est pas initialisé
+            imuInitialized = imuInit(nullptr);
+            if (imuInitialized) {
+                LOG_INFO("SENSORS", "IMU initialisé avec succès après nouvelle tentative");
+            }
+        }
+        
+        // Lecture des autres capteurs (vent, tension, longueur de ligne, etc.)
+        
+        // Log périodique pour vérifier l'activité
+        if (sensorCounter % 100 == 0) {
+            LOG_DEBUG("SENSORS", "Cycle de lecture des capteurs #%lu", sensorCounter);
+            
+            // Affichage périodique des données de l'IMU si disponibles
+            if (imuInitialized && currentImuData.dataValid) {
+                LOG_DEBUG("SENSORS", "IMU: Pitch=%.1f, Roll=%.1f, Yaw=%.1f", 
+                          currentImuData.orientation[0], 
+                          currentImuData.orientation[1], 
+                          currentImuData.orientation[2]);
+            }
+        }
+
+        // Temporisation précise
+        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(100)); // 100ms
     }
 }
 

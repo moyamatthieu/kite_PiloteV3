@@ -64,7 +64,7 @@
 // === INCLUSIONS MODULES COMMUNICATION ===
 #include "communication/kite_webserver.h"
 #include "communication/api.h"
-#include "communication/wifi_manager.h"
+#include "communication/wifi_manager.h" // Ajout de l'en-tête wifi_manager.h
 
 // === INCLUSIONS MODULES CONTROL ===
 #include "control/autopilot.h"
@@ -100,6 +100,9 @@ static const unsigned long SYSTEM_STATE_LOG_INTERVAL_MS = 1000; // 1s
 static const unsigned long MEMORY_LOG_INTERVAL_MS = 2000;       // 2s
 
 // === DÉCLARATION DES FONCTIONS ===
+
+// Tâche d'initialisation principale (démarre après le setup)
+void initTask(void* parameter);
 
 // Fonctions d'initialisation
 void setupWiFi();
@@ -365,47 +368,85 @@ void checkSystemState() {
 
 /**
  * FONCTION PRINCIPALE D'INITIALISATION
- * Initialise le système et démarre les tâches principales
+ * Initialise uniquement le moniteur série et démarre FreeRTOS
  */
 void setup() {
-  // Initialisation du port série et du système de logs
-  logInit((LogLevel)LOG_LEVEL_INFO, 115200);
+    // Initialisation du moniteur série
+    Serial.begin(115200);
+    delay(100); // Court délai pour que le moniteur série s'initialise
+    
+    // Initialisation des logs (premier composant à initialiser)
+    logInit((LogLevel)LOG_LEVEL_INFO, 115200);
+    LOG_INFO("INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
+    
+    // Configuration des broches de diagnostic (LED uniquement)
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, HIGH); // LED allumée pendant l'initialisation
+    
+    // Création de la tâche principale d'initialisation (avec priorité élevée)
+    LOG_INFO("INIT", "Démarrage de la tâche d'initialisation");
+    xTaskCreate(
+        initTask,           // Fonction de la tâche
+        "InitTask",         // Nom de la tâche 
+        8192,               // Taille de la pile (mots)
+        NULL,               // Paramètres de la tâche
+        3,                  // Priorité (plus élevée pour garantir son exécution rapide)
+        NULL                // Handle de la tâche
+    );
+    
+    // FreeRTOS prend maintenant en charge l'exécution
+    LOG_INFO("INIT", "Configuration terminée, FreeRTOS démarré");
+}
 
-  logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
+/**
+ * Tâche d'initialisation principale
+ * @param parameter Paramètre passé à la tâche (non utilisé ici)
+ */
+void initTask(void* parameter) {
+    // Initialisation du système
+    if (systemInit() != SYS_OK) {
+        LOG_ERROR("SYS", "Échec de l'initialisation du système");
+        vTaskDelete(NULL);
+        return;
+    }
 
-  // Initialisation du système et du watchdog
-  SystemErrorCode result = systemInit();
-  if (result != SYS_OK) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "SYS", "Échec init système : %s", systemErrorToString(result));
-  }
+    // Initialisation du matériel
+    setupHardware();
 
-  // Initialiser d'abord le gestionnaire de tâches (avant tout autre composant)
-  // pour qu'il puisse superviser les autres initialisations
-  logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Initialisation du gestionnaire de tâches...");
-  taskManager.begin(&uiManager, &wifiManager);
-  
-  // Configuration du matériel : GPIO, écran, capteurs, actionneurs
-  setupHardware();
+    // S'assurer que l'interface utilisateur est correctement initialisée
+    if (!uiManager.isInitialized()) {
+        LOG_WARNING("INIT", "Interface utilisateur non initialisée, nouvelle tentative");
+        // Nouvelle tentative d'initialisation plus explicite
+        uiManager.begin();
+        
+        // Vérifier à nouveau
+        if (!uiManager.isInitialized()) {
+            LOG_ERROR("INIT", "Échec de l'initialisation de l'interface utilisateur après nouvelle tentative");
+        } else {
+            LOG_INFO("INIT", "Interface utilisateur correctement initialisée après nouvelle tentative");
+        }
+    }
+    
+    // Délai pour s'assurer que tout est correctement initialisé
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-  // Connexion au réseau WiFi configuré dans config.h
-  setupWiFi();
+    // Initialisation des modules
+    wifiManagerInit();
+    servoInitialize();
 
-  // Démarrage du serveur web et configuration OTA
-  setupServer();
+    // Démarrage des tâches FreeRTOS
+    taskManager.begin(&uiManager, &wifiManager);
+    
+    // Délai pour s'assurer que les ressources sont bien initialisées
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Démarrage des tâches
+    taskManager.startTasks();
 
-  // Démarrage effectif des tâches FreeRTOS maintenant que tout est initialisé
-  taskManager.startTasks();
-  logPrint((LogLevel)LOG_LEVEL_INFO, "TASKS", "Tâches FreeRTOS démarrées");
+    LOG_INFO("INIT", "Système prêt");
 
-  // Vérification de l'état global après initialisation
-  if (systemHealthCheck()) {
-    logPrint((LogLevel)LOG_LEVEL_INFO, "INIT", "Système prêt et en bon état");
-  } else {
-    logPrint((LogLevel)LOG_LEVEL_WARNING, "INIT", "Système prêt avec avertissements");
-  }
-
-  // Affichage initial sur l'écran LCD : statut système et réseau
-  display.updateMainDisplay();
+    // Supprimer la tâche une fois l'initialisation terminée
+    vTaskDelete(NULL);
 }
 
 /**
@@ -413,12 +454,8 @@ void setup() {
  * Gère les mises à jour OTA et la coordination des différentes fonctionnalités
  */
 void loop() {
-  // Nourrit les watchdogs pour éviter les resets intempestifs
+  // Gestion des tâches en arrière-plan
   feedWatchdogs();
-
-  // Exécution de la boucle de mise à jour OTA (vérifications et upload)
   ElegantOTA.loop();
-
-  // Pause légère pour céder le cœur CPU (non bloquant)
   delay(10);
 }

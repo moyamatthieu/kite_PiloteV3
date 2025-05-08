@@ -12,6 +12,8 @@
 
 #include "core/logging.h"
 #include <stdarg.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>  // Pour accéder à pcTaskGetName
 
 // Variable globale pour le niveau de journalisation actuel
 LogLevel currentLogLevel = (LogLevel)LOG_LEVEL_INFO; // Niveau par défaut
@@ -109,13 +111,26 @@ void logPrint(LogLevel level, const char* tag, const char* format, ...) {
     return;
   }
   
+  // Récupérer le nom de la tâche en cours
+  char taskName[16] = "main"; // Par défaut, nous supposons que c'est la tâche principale
+  if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+    TaskHandle_t currentTask = xTaskGetCurrentTaskHandle();
+    if (currentTask != NULL) {
+      const char* name = pcTaskGetName(currentTask);
+      if (name != NULL) {
+        strncpy(taskName, name, sizeof(taskName) - 1);
+        taskName[sizeof(taskName) - 1] = '\0'; // Assurer la terminaison de la chaîne
+      }
+    }
+  }
+  
 #if MEMORY_OPTIMIZATION_ENABLED
   unsigned long currentTime = millis();
   unsigned long elapsedTime = currentTime - startTime;
   size_t headerLength = snprintf(logBuffer, LOG_BUFFER_SIZE, 
-                 "[%lu.%03u] %s %s: ",
+                 "[%lu.%03u] %s %s [%s]: ",
                  elapsedTime / 1000, elapsedTime % 1000,
-                 LOG_LEVEL_NAMES[level], tag);
+                 LOG_LEVEL_NAMES[level], tag, taskName);
   
   if (headerLength >= LOG_BUFFER_SIZE - 1) {
     Serial.println("BUFFER OVERFLOW");
@@ -136,11 +151,12 @@ void logPrint(LogLevel level, const char* tag, const char* format, ...) {
   unsigned int milliseconds = elapsedTime % 1000;
   
   size_t headerLength = snprintf(logBuffer, LOG_BUFFER_SIZE, 
-                     "%s[%6lu.%03u] %7s %-10s%s: ",
+                     "%s[%6lu.%03u] %7s %-10s [%-8s]%s: ",
                      LOG_COLORS[level],
                      seconds, milliseconds,
                      LOG_LEVEL_NAMES[level],
                      tag,
+                     taskName,
                      colorReset);
   
   if (headerLength >= LOG_BUFFER_SIZE - 1) {

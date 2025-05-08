@@ -106,8 +106,12 @@ private:
     // Handles des tâches
     static TaskHandle_t displayTaskHandle;      // Handle pour la tâche d'affichage (rendu statique)
     static TaskHandle_t buttonTaskHandle;       // Handle pour la tâche des boutons (rendu statique)
-    TaskHandle_t wifiMonitorTaskHandle;  // Handle pour la tâche de surveillance WiFi
-    TaskHandle_t systemMonitorTaskHandle; // Handle pour la tâche de surveillance système
+    static TaskHandle_t inputTaskHandle;        // Handle pour la tâche des potentiomètres
+    static TaskHandle_t networkTaskHandle;      // Handle pour la tâche réseau
+    static TaskHandle_t controlTaskHandle;      // Handle pour la tâche de contrôle
+    static TaskHandle_t sensorTaskHandle;       // Handle pour la tâche des capteurs
+    TaskHandle_t wifiMonitorTaskHandle;         // Handle pour la tâche de surveillance WiFi
+    TaskHandle_t systemMonitorTaskHandle;       // Handle pour la tâche de surveillance système
     
     // Variables d'état
     bool running;            // Indique si le gestionnaire est en cours d'exécution

@@ -1,169 +1,130 @@
 # Règles de Codage pour le Projet Kite Pilote V3
-PARLE EN FRANÇAIS !!!!
 
+## Principes Généraux
 
-## Principes généraux
+- **Clarté avant optimisation** : Privilégier un code clair et lisible avant d'optimiser les performances.
+- **Documentation approfondie** : Chaque module et fonction doit être documenté avec son but, ses paramètres et valeurs de retour.
+- **Tests systématiques** : Toute nouvelle fonctionnalité doit être accompagnée de tests unitaires et d'intégration.
+- **Gestion des erreurs** : Anticiper et gérer toutes les erreurs possibles de manière robuste et documentée.
+- **Approche non-bloquante** : Utiliser des machines à états finis (FSM) et éviter les appels bloquants comme `delay()`.
 
-- **Clarté avant optimisation**: Privilégier un code clair et lisible avant d'optimiser les performances
-- **Documentation approfondie**: Chaque module et fonction doit être documenté avec son but, ses paramètres et valeurs de retour
-- **Tests systématiques**: Toute nouvelle fonctionnalité doit être accompagnée de tests appropriés
-- **Gestion des erreurs**: Anticiper et gérer toutes les erreurs possibles de manière gracieuse
-- **Approche non-bloquante**: Utiliser des machines à états finis (FSM) au lieu de delay() pour toutes les opérations asynchrones
+## Structure des Fichiers
 
-## Structure des en-têtes de fichiers
+### En-tête Standardisé
 
-Tous les fichiers doivent suivre ce format d'en-tête standardisé:
+Tous les fichiers doivent inclure un en-tête suivant ce format :
 
-```
+```c
 /*
   -----------------------
   Kite PiloteV3 - [Nom du Module] (Implémentation/Interface)
   -----------------------
-  
+
   [Brève description du module]
-  
+
   Version: 3.0.0
   Date: [Date actuelle]
   Auteurs: Équipe Kite PiloteV3
-  
+
   ===== FONCTIONNEMENT =====
   [Description détaillée du fonctionnement du module]
-  
-  Principes de fonctionnement:
+
+  Principes de fonctionnement :
   1. [Principe 1]
   2. [Principe 2]
-  3. [Principe 3]
-  
-  Interactions avec d'autres modules:
-  - [Module A]: [Description de l'interaction]
-  - [Module B]: [Description de l'interaction]
-  
-  Aspects techniques notables:
-  - [Point technique 1]
-  - [Point technique 2]
+
+  Interactions avec d'autres modules :
+  - [Module A] : [Description de l'interaction]
+  - [Module B] : [Description de l'interaction]
 */
 ```
 
-## Vérification de la compilation
+### Organisation des Dossiers
 
-- **Compilation régulière**: Lancer des compilations régulièrement pendant le développement pour détecter les erreurs au plus tôt
-- **Correction immédiate**: Tout problème de compilation doit être résolu avant de continuer le développement
-- **Analyse des warnings**: Traiter les warnings comme des erreurs et les corriger systématiquement
-- **Suivi de l'utilisation mémoire**: Surveiller l'utilisation de la RAM et de la Flash à chaque compilation
-- **Tests unitaires**: Exécuter les tests unitaires après chaque compilation réussie
+- **`src/`** : Contient les fichiers source organisés par module (communication, contrôle, matériel, etc.).
+- **`include/`** : Contient les fichiers d'en-tête correspondants.
+- **`docs-fr/`** : Documentation en français, y compris la vision complète du projet.
+- **`test/`** : Tests unitaires et d'intégration.
+- **`data/`** : Fichiers statiques pour l'interface web.
 
-## Structure du code
+## Architecture du Projet
 
-- **Architecture MCP**: Séparer les modèles, les contrôleurs et les présentateurs
-- **Modules découplés**: Minimiser les dépendances entre modules
-- **Interface claire**: Définir des interfaces stables entre les composants
-- **Cohésion maximale**: Chaque classe ne doit avoir qu'une seule responsabilité
-- **Interdépendances documentées**: Documenter clairement les relations entre modules
+### Modèle MCP (Model-Controller-Presenter)
 
-## Nommage et formatage
+- **Model** : Gestion des données et logique métier.
+- **Controller** : Orchestration des actions et gestion des événements.
+- **Presenter** : Interface utilisateur et affichage des données.
 
-- **CamelCase pour les fonctions et méthodes**: `maFonction()`, `calculerPosition()`
-- **PascalCase pour les classes**: `SensorManager`, `TaskController`
-- **snake_case pour les variables**: `line_length`, `tension_value`
-- **UPPER_CASE pour les constantes**: `MAX_TENSION`, `DEFAULT_FREQUENCY`
-- **Indentation de 2 espaces**: Ne pas utiliser de tabulations
-- **Accolades sur la même ligne**: `if (condition) {`
-- **Préfixes pour les états FSM**: Utiliser des préfixes clairs pour les états d'une FSM, ex: `STATE_INIT`, `STATE_CONNECTING`
+### Multitâche avec FreeRTOS
 
-## Commentaires et documentation
+- **Tâches dédiées** : Chaque fonctionnalité critique doit être gérée par une tâche FreeRTOS.
+- **Synchronisation** : Utiliser des mutex, sémaphores et queues pour éviter les conflits.
+- **Priorités cohérentes** : Les tâches critiques doivent avoir une priorité supérieure à 5 (échelle 0-10).
 
-- **En-tête de fichier**: Auteur, date, licence, description et fonctionnement
-- **Documentation des fonctions**: But, paramètres, valeurs de retour, effets secondaires
-- **Commentaires pour le code complexe**: Expliquer les algorithmes et les choix d'implémentation
-- **Éviter les commentaires évidents**: Ne pas commenter ce qui est évident dans le code
-- **Documentation des API**: Documenter clairement les API publiques
-- **Documentation des FSM**: Décrire clairement chaque état et les transitions possibles
+### Gestion des Capteurs et Actionneurs
 
-## Implémentation de machines à états finis (FSM)
+- **Initialisation non-bloquante** : Utiliser des FSM pour l'initialisation.
+- **Détection des défaillances** : Implémenter des mécanismes de récupération automatique.
+- **Calibration documentée** : Inclure les étapes de calibration dans un fichier README spécifique.
 
-- **Éviter delay()**: Ne jamais utiliser delay() dans le code principal, utiliser des FSM à la place
-- **Variables d'état statiques**: Utiliser des variables static pour conserver l'état entre les appels
-- **Timestamps pour le timing**: Utiliser millis() pour gérer les délais sans bloquer
-- **Valeurs de retour claires**: Retourner true quand la FSM est terminée, false quand elle est en cours
-- **Réinitialisation après succès**: Réinitialiser l'état à la fin pour permettre une nouvelle exécution
-- **Gestion des erreurs**: Prévoir des états d'erreur et des mécanismes de récupération
-- **Timeout systématique**: Implémenter un timeout pour chaque étape de la FSM
-- **Nommage explicite des états**: Utiliser des constantes ou enum pour nommer les états
+## Bonnes Pratiques de Développement
 
-## Gestion des erreurs
+### Compilation et Tests
 
-- **Vérification des valeurs de retour**: Toujours vérifier les valeurs de retour des fonctions
-- **Logging approprié**: Utiliser les différents niveaux de log (INFO, WARNING, ERROR, DEBUG)
-- **Propagation cohérente**: Propager les erreurs au niveau approprié
-- **Récupération gracieuse**: Prévoir des stratégies de récupération après erreur
-- **Validation des entrées**: Vérifier systématiquement la validité des données entrantes
+- **Compilation fréquente** : Compiler après chaque modification significative.
+- **Analyse des warnings** : Traiter les warnings comme des erreurs.
+- **Tests automatisés** : Utiliser PlatformIO pour exécuter des tests unitaires et d'intégration.
 
-## Communication et protocoles
+### Gestion des Erreurs
 
-- **Protocoles documentés**: Documenter tous les formats de message
-- **Vérification des données**: Valider toutes les données reçues avant traitement
-- **Timeout systématiques**: Implémenter des timeouts pour toutes les communications
-- **Gestion des déconnexions**: Prévoir des stratégies en cas de perte de connexion
-- **Communication non-bloquante**: Implémenter toutes les communications avec des FSM
+- **Validation des entrées** : Vérifier systématiquement la validité des données entrantes.
+- **Journalisation efficace** : Utiliser les niveaux de log (INFO, WARNING, ERROR, DEBUG).
+- **Propagation cohérente** : Propager les erreurs au niveau approprié.
 
-## Performances et ressources
+### Documentation
 
-- **Optimisation ciblée**: N'optimiser que les parties critiques après profilage
-- **Économie de mémoire**: Minimiser l'allocation dynamique de mémoire
-- **Gestion des tâches**: Respecter les priorités et ne pas bloquer les tâches critiques
-- **Surveillance des ressources**: Implémenter des mécanismes de surveillance de l'utilisation CPU/mémoire
-- **Tailles de pile appropriées**: Définir les tailles de pile FreeRTOS en fonction des besoins réels
+- **API publique** : Documenter clairement les interfaces publiques.
+- **FSM** : Décrire chaque état et transition dans les commentaires.
+- **Modules** : Inclure des diagrammes UML pour les modules complexes.
 
-## Sécurité
+## Implémentation des FSM
 
-- **Validation des entrées**: Valider toutes les entrées, même celles supposées sûres
-- **Protection contre les débordements**: Vérifier les limites des tableaux et des buffers
-- **Sécurisation des communications**: Utiliser le chiffrement quand c'est possible
-- **Gestion des accès concurrents**: Protéger les ressources partagées avec des mutex appropriés
-- **Validation des données externes**: Valider et sanitiser toutes les données provenant de l'extérieur
+- **Éviter `delay()`** : Utiliser `millis()` ou `vTaskDelayUntil` pour gérer les délais.
+- **Timeout systématique** : Implémenter un timeout pour chaque étape.
+- **Réinitialisation après succès** : Réinitialiser l'état pour permettre une nouvelle exécution.
 
-## Processus de développement
+## Processus de Développement
 
-- **Documentation à jour**: Mettre à jour la documentation en même temps que le code.
-  - **Correction**: Ajout d'un exemple pour clarifier ce point : "Exemple : Si une nouvelle fonction est ajoutée, documentez son but, ses paramètres et ses valeurs de retour immédiatement."
+1. **Planification** : Définir les objectifs et tâches dans un outil comme Trello.
+2. **Conception** : Créer des diagrammes UML et spécifications.
+3. **Implémentation** : Respecter les bonnes pratiques et effectuer des commits fréquents.
+4. **Compilation et Tests** : Vérifier la compilation et exécuter les tests.
+5. **Revue** : Utiliser des pull requests pour les revues de code.
+6. **Intégration** : Fusionner dans la branche principale après validation.
+7. **Documentation** : Mettre à jour la documentation technique et utilisateur.
+8. **Rétrospective** : Analyser les points d'amélioration après chaque itération.
 
-## Spécificités FreeRTOS
+## Outils Recommandés
 
-- **Priorités cohérentes**: Attribuer des priorités cohérentes aux tâches.
-  - **Correction**: Ajout d'une note : "Les tâches critiques doivent avoir une priorité supérieure à 5 dans une échelle de 0 à 10."
-- **Délais non-bloquants**: Utiliser vTaskDelay ou vTaskDelayUntil au lieu de délais bloquants.
-  - **Correction**: Ajout d'un exemple : "Exemple : Utilisez vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(100)) pour des tâches périodiques."
-- **Protection des ressources**: Utiliser les sémaphores et mutex appropriés.
-  - **Correction**: Ajout d'une précision : "Utilisez xSemaphoreTake et xSemaphoreGive pour protéger les sections critiques."
+- **IDE** : Visual Studio Code avec PlatformIO.
+- **Linting** : `clang-tidy` ou `cppcheck`.
+- **Formatage** : `clang-format` pour un style de code cohérent.
+- **CI/CD** : Automatiser les tests avec GitHub Actions.
+- **Débogage** : Utiliser ESP-IDF Monitor ou JTag pour les problèmes complexes.
+- **Documentation** : Générer des documents avec Doxygen.
 
-## Capteurs et actuateurs
+## Sécurité et Performances
 
-- **Calibration documentée**: Documenter les procédures de calibration.
-  - **Correction**: Ajout d'une précision : "Inclure les étapes de calibration dans un fichier README spécifique au capteur."
-- **Plages de valeurs**: Définir et respecter les plages de valeurs acceptables
-- **Filtrage approprié**: Implémenter un filtrage adapté à chaque type de capteur
-- **Détection des défaillances**: Mettre en place des mécanismes de détection de défaillance.
-  - **Correction**: Ajout d'un exemple : "Exemple : Implémentez un watchdog pour surveiller les capteurs critiques."
-- **Modes dégradés**: Prévoir des modes de fonctionnement dégradés en cas de défaillance
-- **Initialisation non-bloquante**: Utiliser des FSM pour l'initialisation des capteurs et actuateurs
+- **Validation des données** : Vérifier toutes les données externes.
+- **Protection des ressources** : Utiliser des mutex pour les sections critiques.
+- **Optimisation ciblée** : N'optimiser que les parties identifiées comme critiques après profilage.
+- **Surveillance des ressources** : Implémenter des mécanismes pour surveiller l'utilisation CPU/mémoire.
 
-## Itération de développement
+## Gestion des Versions
 
-1. **Planification**: Définir clairement les objectifs de l'itération.
-   - **Correction**: Ajout d'une précision : "Utilisez un outil de gestion de projet comme Trello ou Jira pour suivre les tâches."
-2. **Conception**: Concevoir les nouvelles fonctionnalités ou modifications.
-   - **Correction**: Ajout d'une note : "Inclure des diagrammes UML pour les modules complexes."
-3. **Implémentation**: Coder en respectant les règles ci-dessus, en particulier l'approche non-bloquante.
-   - **Correction**: Ajout d'une précision : "Effectuez des commits fréquents avec des messages clairs."
-4. **Compilation et tests**: Vérifier régulièrement que le code compile et passe les tests.
-   - **Correction**: Ajout d'une note : "Automatisez les tests avec un outil comme PlatformIO."
-5. **Revue**: Faire réviser le code par un autre développeur.
-   - **Correction**: Ajout d'une précision : "Utilisez des pull requests pour faciliter les revues."
-6. **Intégration**: Fusionner le code dans la branche principale.
-   - **Correction**: Ajout d'une note : "Effectuez des tests d'intégration avant de fusionner."
-7. **Validation**: Valider le fonctionnement sur le matériel cible.
-   - **Correction**: Ajout d'une précision : "Documentez les résultats des tests dans un fichier dédié."
-8. **Documentation**: Mettre à jour la documentation technique et utilisateur.
-   - **Correction**: Ajout d'une note : "Inclure des captures d'écran ou des vidéos pour les guides utilisateur."
-9. **Rétrospective**: Analyser ce qui a bien fonctionné et ce qui peut être amélioré.
-   - **Correction**: Ajout d'une précision : "Organisez une réunion de rétrospective avec l'équipe."
+- **Branche principale** : Pousser directement après validation des tests.
+- **Historique des builds** : Conserver un journal des erreurs pour identifier les problèmes récurrents.
+
+## Conclusion
+
+Ces règles visent à garantir un code robuste, maintenable et performant pour le projet Kite Pilote V3. Respectez-les pour assurer la qualité et la pérennité du projet.

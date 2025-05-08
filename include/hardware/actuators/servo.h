@@ -58,5 +58,6 @@ bool servoSetTrim(int angle);
 bool servoSetLineModulation(int position);
 void servoDetachAll();
 bool servoIsAttached(uint8_t servoIndex);
+void servoInitialize();  // Ajout de la déclaration de la fonction publique pour initialiser les servos
 
 #endif // SERVO_H

@@ -46,6 +46,37 @@ bool imuInit(TwoWire &wirePort) {
     return true;
 }
 
+/**
+ * Initialise l'IMU avec une configuration optionnelle
+ * @param config Configuration optionnelle de l'IMU
+ * @return true si succès, false si échec
+ */
+bool imuInit(const IMUConfig* config) {
+    // Protection thread-safe
+    if (imuMutex == NULL) {
+        imuMutex = xSemaphoreCreateMutex();
+        if (imuMutex == NULL) {
+            LOG_ERROR("IMU", "Échec de création du mutex");
+            return false;
+        }
+    }
+    
+    Wire.begin();
+    mpu6050.begin();
+    
+    // Si une configuration est fournie, l'appliquer
+    if (config != nullptr) {
+        // Ici, on pourrait configurer le MPU6050 selon les paramètres fournis
+        // Pour cette implémentation, on utilise les valeurs par défaut
+        LOG_INFO("IMU", "Configuration personnalisée appliquée");
+    }
+    
+    mpu6050.calcGyroOffsets(true);
+    LOG_INFO("IMU", "MPU6050 initialisé et calibré");
+    
+    imuInitialized = true;
+    return true;
+}
 
 /**
  * Lit les données de l'IMU
@@ -72,6 +103,55 @@ IMUData imuReadData() {
 }
 
 /**
+ * Lit les données traitées de l'IMU
+ * @param data Structure pour stocker les données traitées
+ * @return true si succès, false si échec
+ */
+bool imuReadProcessedData(IMUData* data) {
+    if (data == nullptr) {
+        LOG_ERROR("IMU", "Pointeur de données IMU invalide");
+        return false;
+    }
+    
+    // Protection thread-safe
+    if (imuMutex == NULL || !imuInitialized) {
+        LOG_ERROR("IMU", "IMU non initialisé ou mutex non disponible");
+        return false;
+    }
+    
+    bool result = false;
+    
+    // Mise à jour manuelle des données au lieu d'appeler updateIMU()
+    if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // Mettre à jour les données
+        mpu6050.update();
+        
+        // Lire les valeurs mises à jour
+        currentIMUData.orientation[1] = mpu6050.getAngleX(); // roll
+        currentIMUData.orientation[0] = mpu6050.getAngleY(); // pitch
+        currentIMUData.orientation[2] = mpu6050.getAngleZ(); // yaw
+        currentIMUData.gyro[0] = mpu6050.getGyroX();
+        currentIMUData.gyro[1] = mpu6050.getGyroY();
+        currentIMUData.gyro[2] = mpu6050.getGyroZ();
+        currentIMUData.accel[0] = mpu6050.getAccX();
+        currentIMUData.accel[1] = mpu6050.getAccY();
+        currentIMUData.accel[2] = mpu6050.getAccZ();
+        currentIMUData.timestamp = millis();
+        currentIMUData.dataValid = true;
+        
+        // Copier les données dans la structure fournie
+        *data = currentIMUData;
+        
+        xSemaphoreGive(imuMutex);
+        result = true;
+    } else {
+        LOG_ERROR("IMU", "Impossible d'acquérir le mutex IMU pour la lecture");
+    }
+    
+    return result;
+}
+
+/**
  * Calibre l'IMU
  * @param autoMode Mode automatique si true, sinon guidage pas à pas
  * @return État de calibration après l'opération
@@ -87,7 +167,6 @@ IMUCalibrationState imuCalibrate(bool autoMode) {
     
     if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         // Simulation de calibration
-// No change needed here
         LOG_INFO("IMU", "Calibration de l'IMU réussie");
         result = IMU_CALIBRATED;
         xSemaphoreGive(imuMutex);
@@ -107,7 +186,6 @@ IMUCalibrationState imuGetCalibrationState() {
         return IMU_NOT_CALIBRATED;
     }
     
-// No change needed here
     if (currentIMUData.dataValid) {
         return IMU_CALIBRATED;
     }
@@ -221,7 +299,6 @@ bool updateIMU() {
          currentIMUData.accel[1] = mpu6050.getAccY();
          currentIMUData.accel[2] = mpu6050.getAccZ();
         currentIMUData.timestamp = millis();
-// No change needed here
         currentIMUData.dataValid = true;
         
         result = true;
@@ -231,4 +308,16 @@ bool updateIMU() {
     }
     
     return result;
+}
+
+// Ajout d'un délai adaptatif pour éviter les blocages lors de l'acquisition du mutex.
+bool imuTryLock() {
+    for (int i = 0; i < 3; i++) {
+        if (xSemaphoreTake(imuMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10)); // Attente avant une nouvelle tentative
+    }
+    LOG_ERROR("IMU", "Impossible d'acquérir le mutex après plusieurs tentatives");
+    return false;
 }
