@@ -12,7 +12,10 @@
 
 #include "hardware/io/ui_manager.h"
 #include "utils/logging.h" 
+#include "core/module.h"
 #include <WiFi.h>
+#include <vector>
+#include <string>
 
 // Caractères personnalisés pour l'affichage
 const uint8_t charDirection[] = {
@@ -420,17 +423,16 @@ void UIManager::drawDirection(uint8_t row, int value) {
 
 void UIManager::showMenu(MenuState menu) {
     if (!lcdInitialized) return;
-    
     currentMenu = menu;
     currentMenuSelection = 0;
     clear();
-    
     switch (menu) {
         case MENU_MAIN:
             centerText(0, "Menu Principal");
             printMenuItem(1, "Contrôle", currentMenuSelection == 0);
             printMenuItem(2, "Paramètres", currentMenuSelection == 1);
             printMenuItem(3, "Système", currentMenuSelection == 2);
+            printMenuItem(4, "Modules", currentMenuSelection == 3);
             break;
             
         case MENU_SETTINGS:
@@ -460,6 +462,22 @@ void UIManager::showMenu(MenuState menu) {
             printMenuItem(2, "Mise à jour OTA", currentMenuSelection == 1);
             printMenuItem(3, "Retour", currentMenuSelection == 2);
             break;
+
+        case MENU_MODULES: {
+            centerText(0, "Modules actifs");
+            int row = 1;
+            int idx = 0;
+            for (Module* m : ModuleRegistry::instance().modules()) {
+                char line[21];
+                snprintf(line, sizeof(line), "%c%s [%s]", (currentMenuSelection == idx ? '>' : ' '), m->name(), m->isEnabled() ? "ON" : "OFF");
+                centerText(row, line);
+                row++;
+                idx++;
+                if (row >= LCD_ROWS) break;
+            }
+            for (; row < LCD_ROWS; ++row) centerText(row, "");
+            break;
+        }
     }
 }
 
@@ -479,6 +497,12 @@ void UIManager::printMenuItem(uint8_t row, const char* text, bool selected) {
 void UIManager::menuUp() {
     if (!lcdInitialized) return;
     
+    if (currentMenu == MENU_MODULES && currentMenuSelection > 0) {
+        currentMenuSelection--;
+        showMenu(currentMenu);
+        return;
+    }
+
     if (currentMenuSelection > 0) {
         currentMenuSelection--;
         showMenu(currentMenu);
@@ -488,7 +512,16 @@ void UIManager::menuUp() {
 void UIManager::menuDown() {
     if (!lcdInitialized) return;
     
-    const uint8_t menuItemCounts[] = {3, 3, 3, 3, 3};
+    if (currentMenu == MENU_MODULES) {
+        int moduleCount = ModuleRegistry::instance().modules().size();
+        if (currentMenuSelection < moduleCount - 1) {
+            currentMenuSelection++;
+            showMenu(currentMenu);
+        }
+        return;
+    }
+
+    const uint8_t menuItemCounts[] = {4, 3, 3, 3, 3};
     
     if (currentMenuSelection < menuItemCounts[currentMenu] - 1) {
         currentMenuSelection++;
@@ -499,6 +532,20 @@ void UIManager::menuDown() {
 void UIManager::menuSelect() {
     if (!lcdInitialized) return;
     
+    if (currentMenu == MENU_MODULES) {
+        int idx = 0;
+        for (Module* m : ModuleRegistry::instance().modules()) {
+            if (idx == currentMenuSelection) {
+                if (m->isEnabled()) m->disable();
+                else m->enable();
+                break;
+            }
+            idx++;
+        }
+        showMenu(MENU_MODULES);
+        return;
+    }
+
     switch (currentMenu) {
         case MENU_MAIN:
             switch (currentMenuSelection) {
@@ -510,6 +557,9 @@ void UIManager::menuSelect() {
                     break;
                 case 2:
                     showMenu(MENU_SYSTEM);
+                    break;
+                case 3:
+                    showMenu(MENU_MODULES);
                     break;
             }
             break;
@@ -588,6 +638,7 @@ void UIManager::menuBack() {
         case MENU_SETTINGS:
         case MENU_CONTROL:
         case MENU_SYSTEM:
+        case MENU_MODULES:
             showMenu(MENU_MAIN);
             break;
             

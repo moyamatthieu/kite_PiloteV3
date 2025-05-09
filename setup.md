@@ -131,3 +131,18 @@ En cas de problème :
 1. Consulter `docs-fr/`
 2. Vérifier les logs dans `logs/`
 3. Ouvrir une issue sur GitHub
+
+# Setup rapide Kite PiloteV3
+
+## Nouveautés 2025
+- Modules activables/désactivables dynamiquement (menu LCD, API REST, web)
+- Supervision OOP : chaque module possède sa propre FSM, gestion d'erreur, configuration
+- API REST `/api/v1/modules` pour piloter les modules à distance
+
+## Installation
+1. Cloner le dépôt
+2. Installer PlatformIO et ouvrir le projet dans VSCode
+3. Compiler et téléverser sur l'ESP32
+4. Accéder à l'interface web ou utiliser le menu LCD pour gérer les modules
+
+Voir `README.md` pour l'architecture et `logs/discussions.md` pour l'historique détaillé.

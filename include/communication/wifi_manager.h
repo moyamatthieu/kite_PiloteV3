@@ -34,6 +34,7 @@ public:
 
     // FSM handling
     void handleFSM();
+    friend class WiFiFSM; // Permet à la FSM d'accéder aux membres privés
     
 private:
     char ssid[33];           // SSID du réseau (max 32 caractères + null)
@@ -42,6 +43,7 @@ private:
     bool apActive;           // Mode AP actif
     unsigned long lastConnectAttempt; // Timestamp de la dernière tentative
     uint32_t timeout;        // Timeout for operations
+    WiFiFSM* wifiFsm;        // Ajout du membre FSM
     
     // Méthodes privées
     void updateConnectionStatus();

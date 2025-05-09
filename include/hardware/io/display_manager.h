@@ -8,6 +8,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include "../../core/config.h"
+#include "utils/state_machine.h"
 
 // Constantes pour l'écran LCD
 #define LCD_I2C_ADDR 0x27
@@ -19,6 +20,34 @@
 // Constantes pour la gestion de l'écran
 #define LCD_CHECK_INTERVAL 10000  // Intervalle de vérification de l'état de l'écran (ms)
 #define LCD_AUTO_RECOVERY true    // Réinitialisation automatique en cas de problème
+
+class DisplayManager; // Forward pour le pointeur
+
+// FSM pour l'initialisation du LCD
+class DisplayInitFSM : public StateMachine {
+public:
+    enum DisplayInitState {
+        INIT_START = 0,
+        I2C_CONFIG = 1,
+        LCD_INIT = 2,
+        BACKLIGHT_ON = 3,
+        CLEAR_DISPLAY = 4,
+        DONE = 100
+    };
+    DisplayInitFSM(DisplayManager* mgr) : StateMachine("DisplayInitFSM", INIT_START, 3000, -1), manager(mgr) {}
+    DisplayManager* manager;
+    unsigned long lastActionTime = 0;
+    int retryCount = 0;
+    static constexpr int maxRetries = 3;
+protected:
+    /**
+     * processState : machine à états élégante et non-bloquante
+     * L'état INIT_START doit toujours retourner immédiatement l'état suivant (I2C_CONFIG)
+     * pour garantir qu'aucun timeout ne soit déclenché sur l'état initial.
+     * Cette pratique est recommandée pour toute FSM professionnelle.
+     */
+    int processState(int state) override;
+};
 
 /**
  * Classe de gestion de l'affichage LCD
@@ -73,6 +102,10 @@ public:
     
     // Getters et setters
     bool isInitialized() const { return lcdInitialized; }
+    LiquidCrystal_I2C& getLcd() { return lcd; }
+    void setLcdInitialized(bool value) { lcdInitialized = value; }
+    // FSM d'init LCD
+    DisplayInitFSM* displayInitFsm;
 };
 
 #endif // DISPLAY_MANAGER_H

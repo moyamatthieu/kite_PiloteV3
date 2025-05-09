@@ -22,7 +22,7 @@
   4. Gestion optimisée des mises à jour pour limiter les écritures
   
   Architecture FSM pour l'initialisation LCD :
-  - États : INIT_START, I2C_CHECK, LCD_CONFIG, BACKLIGHT_SET, CLEAR_DISPLAY, etc.
+  - États : INIT_START, I2C_CONFIG, LCD_INIT, BACKLIGHT_ON, CLEAR_DISPLAY, DONE, etc.
   - Chaque état représente une étape atomique de l'initialisation
   - Transitions basées sur le temps écoulé et les résultats des opérations
   - Approche résiliente avec tentatives multiples en cas d'échec
@@ -75,6 +75,7 @@
 
 #include "hardware/io/display_manager.h"
 #include "utils/logging.h"
+#include "utils/state_machine.h"
 
 // Variable globale pour l'état du système (utilisée dans l'affichage)
 static uint8_t systemStatus = 100; // 100% par défaut, représente l'état de santé du système
@@ -91,8 +92,10 @@ DisplayManager::DisplayManager() :
     recoveryAttempts(0),
     successfulUpdates(0),
     i2cInitialized(false),
-    initAttemptCount(0)
+    initAttemptCount(0),
+    displayInitFsm(nullptr)
 {
+    displayInitFsm = new DisplayInitFSM(this);
     LOG_INFO("DISPLAY", "Gestionnaire d'affichage créé");
     
     // Initialiser les buffers avec des espaces
@@ -110,7 +113,7 @@ DisplayManager::DisplayManager() :
  * Destructeur - nettoie les ressources
  */
 DisplayManager::~DisplayManager() {
-    // Nettoyer les ressources si nécessaire
+    if (displayInitFsm) delete displayInitFsm;
     LOG_INFO("DISPLAY", "Gestionnaire d'affichage détruit");
 }
 
@@ -175,102 +178,53 @@ bool DisplayManager::setupI2C() {
  * @return true si l'initialisation réussit, false sinon
  */
 bool DisplayManager::initLCD() {
-  // Marquer comme non initialisé au début
-  lcdInitialized = false;
-  
-  // Réinitialiser les variables d'état
-  recoveryAttempts = 0;
-  
-  LOG_INFO("DISPLAY", "Initialisation de l'écran LCD");
-  
-  // Configuration I2C si nécessaire
-  if (!i2cInitialized) {
-    LOG_INFO("DISPLAY", "Configuration de l'I2C...");
-    
-    // Réinitialiser le bus I2C
-    Wire.end();
-    delay(100);
-    
-    // Commencer avec une fréquence plus basse
-    if (!setupI2C()) {
-      LOG_ERROR("DISPLAY", "Échec de configuration I2C - tentative avec fréquence basse");
-      
-      // Nouvelle tentative avec une fréquence plus basse
-      Wire.setClock(100000); // 100 kHz au lieu du 400 kHz par défaut
-      if (!setupI2C()) {
-        LOG_ERROR("DISPLAY", "Échec de configuration I2C même à basse fréquence");
-        return false;
-      }
+    int state = displayInitFsm->update();
+    return (state == DisplayInitFSM::DONE);
+}
+
+/**
+ * Implémentation de la FSM d'init LCD
+ */
+int DisplayInitFSM::processState(int state) {
+    unsigned long now = millis();
+    switch (state) {
+        case INIT_START:
+            // Bonne pratique : l'état initial doit toujours passer immédiatement à l'étape suivante
+            // pour éviter tout timeout inutile et garantir une FSM non-bloquante et élégante.
+            retryCount = 0;
+            lastActionTime = now;
+            return I2C_CONFIG;
+        case I2C_CONFIG:
+            if (!manager->setupI2C()) {
+                retryCount++;
+                if (retryCount > maxRetries) return DONE;
+                lastActionTime = now;
+                return I2C_CONFIG;
+            }
+            lastActionTime = now;
+            return LCD_INIT;
+        case LCD_INIT:
+            if (now - lastActionTime < 100) return LCD_INIT;
+            manager->getLcd().init();
+            manager->setLcdInitialized(true);
+            lastActionTime = now;
+            return BACKLIGHT_ON;
+        case BACKLIGHT_ON:
+            if (now - lastActionTime < 50) return BACKLIGHT_ON;
+            manager->getLcd().backlight();
+            lastActionTime = now;
+            return CLEAR_DISPLAY;
+        case CLEAR_DISPLAY:
+            if (now - lastActionTime < 50) return CLEAR_DISPLAY;
+            manager->getLcd().clear();
+            manager->createCustomChars();
+            lastActionTime = now;
+            return DONE;
+        case DONE:
+            return DONE;
+        default:
+            return state;
     }
-  }
-  
-  // Tentatives d'initialisation multiples
-  const uint8_t maxAttempts = 3;
-  for (uint8_t attempt = 1; attempt <= maxAttempts; attempt++) {
-    LOG_INFO("DISPLAY", "Tentative %d/%d", attempt, maxAttempts);
-    
-    // Force de réinitialisation matérielle du bus I2C entre les tentatives
-    if (attempt > 1) {
-      Wire.end();
-      delay(300); // Délai plus long entre les tentatives
-      Wire.begin(I2C_SDA, I2C_SCL);
-      Wire.setClock(50000); // Fréquence encore plus basse pour plus de fiabilité
-      delay(200);
-    }
-    
-    // Test initial du bus I2C - vérification que le LCD répond
-    Wire.beginTransmission(LCD_I2C_ADDR);
-    byte error = Wire.endTransmission();
-    
-    if (error != 0) {
-      LOG_WARNING("DISPLAY", "Erreur I2C pendant la tentative %d (code: %d)", attempt, error);
-      delay(500); // Délai plus long avant la prochaine tentative
-      continue; // Passer à la prochaine tentative
-    }
-    
-    // Initialisation en deux étapes pour plus de stabilité
-    lcd = LiquidCrystal_I2C(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS); // Réinstancier l'objet LCD
-    
-    // Séquence d'initialisation explicite
-    lcd.init();      // Première initialisation
-    delay(250);      // Délai critique pour la stabilisation du matériel
-    lcd.backlight(); // Activer le rétroéclairage
-    delay(100);      // Attendre que le rétroéclairage s'active
-    lcd.clear();     // Effacer l'écran
-    delay(50);       // Attendre que l'effacement soit effectué
-    lcd.home();      // Retourner à la position d'origine
-    delay(50);       // Attendre que le curseur soit repositionné
-    
-    // Test d'affichage basique
-    lcd.setCursor(0, 0);
-    lcd.print("Test LCD OK");
-    delay(100);
-    
-    // Vérification supplémentaire que l'écran est réellement fonctionnel
-    if (checkLCDConnection()) {
-      LOG_INFO("DISPLAY", "Écran LCD initialisé avec succès");
-      
-      // Compléter le processus d'initialisation
-      lcd.clear();
-      createCustomChars();
-      
-      // Mettre à jour l'état
-      lcdInitialized = true;
-      initAttemptCount = attempt;
-      lastInitTime = millis();
-      
-      return true;
-    }
-    
-    LOG_WARNING("DISPLAY", "Tentative %d a échoué", attempt);
-    delay(500); // Délai plus long entre les tentatives
-  }
-  
-  LOG_ERROR("DISPLAY", "Échec d'initialisation après %d tentatives", maxAttempts);
-  
-  // Permettre le fonctionnement sans écran LCD
-  LOG_WARNING("DISPLAY", "Poursuite du fonctionnement sans écran LCD");
-  return false;
 }
 
 /**

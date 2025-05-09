@@ -45,7 +45,8 @@ enum MenuState {
     MENU_SETTINGS = 1,
     MENU_CONTROL = 2,
     MENU_WIFI = 3,
-    MENU_SYSTEM = 4
+    MENU_SYSTEM = 4,
+    MENU_MODULES = 5 // Ajouté pour la gestion dynamique des modules
 };
 
 // Gestionnaire unifié de l'interface utilisateur

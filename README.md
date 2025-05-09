@@ -4,30 +4,41 @@
 
 Kite PiloteV3 est un système d'autopilote avancé pour kite générateur d'électricité basé sur ESP32. Ce projet a pour objectif de maximiser la production d'énergie renouvelable grâce à un cerf-volant de traction en contrôlant automatiquement sa trajectoire. Le système offre une interface web avec capacité de mise à jour OTA (Over The Air) et une interface utilisateur via écran LCD 2004, permettant un contrôle local ou distant. L'architecture multitâche robuste intègre des protections contre les problèmes de mémoire, des mécanismes de sécurité avancés et un système de journalisation complet.
 
-## Architecture du projet
+## Architecture
 
-Le projet Kite PiloteV3 est construit selon l'architecture **MCP (Model-Controller-Presenter)**, une variante moderne et adaptée aux systèmes embarqués IoT:
+- Architecture orientée objet (OOP) : tous les modules (capteurs, actionneurs, communication) héritent d'une base `Module`.
+- Activation/désactivation dynamique des modules à l'exécution (menu LCD, API REST, web).
+- Chaque module encapsule sa propre FSM (StateMachine), gestion d'erreur (ErrorManager) et configuration.
+- Enregistrement automatique des modules dans un `ModuleRegistry` centralisé.
+- Tâches FreeRTOS démarrées/arrêtées dynamiquement selon l'état des modules.
 
-- **Model**: Gère les données et la logique métier du système
-  - Définit les structures de données du système (ex: `AutopilotParameters`, `AutopilotState`)
-  - Implémente les algorithmes de calcul et traitement des données
-  - Assure la persistance et l'intégrité des données
+## Modules principaux
 
-- **Controller**: Contrôle le comportement du système et orchestre les interactions
-  - Implémente les algorithmes d'autopilotage (ex: module `autopilot.h`)
-  - Gère les réactions aux événements système (capteurs, utilisateur)
-  - Coordonne les différents composants matériels et logiciels
+- Capteurs : IMU, vent, longueur de ligne, tension (tous héritent de `SensorModule`)
+- Actionneurs : Servo, Treuil (héritent de `ActuatorModule`)
+- Communication : WiFi, API REST, Webserver (héritent de `Module`)
 
-- **Presenter**: Prépare et présente les données à l'utilisateur
-  - Gère l'interface LCD et les boutons physiques
-  - Implémente l'interface web pour l'accès à distance
-  - Transforme les données brutes en informations compréhensibles
+## Interfaces
 
-Cette architecture MCP offre plusieurs avantages pour un projet IoT complexe:
-- **Séparation claire des responsabilités**: facilite la maintenance et les tests
-- **Modularité**: permet de modifier une couche sans impacter les autres
-- **Adaptabilité**: particulièrement adaptée aux ressources limitées des systèmes embarqués
-- **Testabilité**: chaque composant peut être testé indépendamment
+- Menu LCD dynamique : activation/désactivation des modules, affichage de leur état.
+- API REST `/api/v1/modules` : lister, activer/désactiver les modules à distance.
+- Dashboard web : visualisation de l'état système et des modules.
+
+## FSM & gestion d'erreur
+
+- Chaque module possède sa propre machine à états non-bloquante.
+- Gestion d'erreur dédiée par module, reporting centralisé.
+
+## Extensibilité
+
+- Ajout de nouveaux modules (capteurs/actionneurs/communication) très simple par héritage.
+- Prêt pour la configuration dynamique (JSON, web, etc.).
+
+## Statut
+
+- Fonctionnement partiel validé : activation/désactivation dynamique, supervision, FSM, gestion d'erreur, API REST, UI LCD.
+- Migration OOP complète pour tous les modules principaux.
+- Voir `logs/discussions.md` pour l'historique détaillé des refontes.
 
 ## Améliorations récentes
 
@@ -346,8 +357,6 @@ Pour lancer la simulation :
 2. Ouvrir le projet dans VS Code
 3. Démarrer la simulation avec la commande "Wokwi: Start Simulator"
 
-
-
 ## Optimisations et améliorations
 
 Le projet inclut plusieurs améliorations pour assurer la performance et la stabilité :
@@ -507,38 +516,3 @@ Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 ## Date de dernière mise à jour
 
 7 mai 2025
-
-# Instructions pour les Interactions Futures
-
-## Contexte du Projet
-
-- **Date actuelle** : 7 mai 2025
-- **Système d'exploitation** : Windows
-- **Structure du projet** :
-  - Le projet est organisé en plusieurs dossiers : `src`, `include`, `docs-fr`, `data`, etc.
-  - Les fichiers principaux incluent des modules pour la communication, le contrôle, le matériel, l'interface utilisateur et les utilitaires.
-  - Une documentation détaillée est disponible dans le dossier `docs-fr`.
-
-## Directives Générales
-
-1. **Respect de la Structure** :
-   - Toute modification doit respecter l'architecture existante du projet.
-   - Les fichiers doivent être placés dans les dossiers appropriés (ex : `src/communication` pour les modules de communication).
-
-2. **Approche non-bloquante** :
-   - Utiliser systématiquement des machines à états finis (FSM) au lieu de delay()
-   - Documenter clairement les états et transitions des FSM
-   - Vérifier que toutes les opérations asynchrones suivent cette approche
-
-3. **Documentation** :
-   - Ajouter des commentaires clairs et descriptifs pour chaque modification.
-   - Mettre à jour la documentation dans `docs-fr` si nécessaire.
-   - Suivre le format standardisé pour les en-têtes de fichiers
-
-4. **Tests** :
-   - Vérifier que les tests dans le dossier `test/` couvrent les nouvelles fonctionnalités ou corrections.
-   - Ajouter de nouveaux tests si nécessaire.
-
-5. **Collaboration** :
-   - Toutes les interactions doivent être basées sur le contexte actuel du projet.
-   - Les réponses doivent être précises, concises et adaptées au projet.

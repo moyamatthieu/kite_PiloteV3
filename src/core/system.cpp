@@ -21,6 +21,8 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>   // Ajout: inclusion pour les fonctions watchdog
 
+#if MODULE_LOGGING_ENABLED
+
 // Forward declaration pour la tâche de redémarrage
 static void restartTask(void* parameters);
 
@@ -360,3 +362,7 @@ void handleSystemError(const char* errorSource, const char* errorMessage) {
   // Logger l'erreur
   LOG_ERROR("SYS", "Erreur système: %s", systemInfo.lastErrorMessage);
 }
+
+#else
+// Journalisation système désactivée à la compilation (MODULE_LOGGING_ENABLED=0)
+#endif

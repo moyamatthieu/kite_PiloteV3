@@ -70,6 +70,7 @@ void handleSystemApi(AsyncWebServerRequest* request);
 void handleSensorsApi(AsyncWebServerRequest* request);
 void handleControlApi(AsyncWebServerRequest* request);
 void handleDiagnosticsApi(AsyncWebServerRequest* request);
+void handleModulesApi(AsyncWebServerRequest* request);
 
 // Envoi des données de télémétrie
 void sendTelemetryData(const TelemetryData& data);

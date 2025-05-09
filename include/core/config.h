@@ -69,6 +69,31 @@
 // No change needed here
 #define POT_DEADZONE           10    // Zone morte pour éviter bruit
 
+// === ACTIVATION/DÉSACTIVATION DES MODULES ===
+// Mettre à 1 pour activer, 0 pour désactiver chaque module
+#define MODULE_WEBSERVER_ENABLED      0   // Serveur web
+#define MODULE_WIFI_ENABLED           1   // WiFi
+#define MODULE_SERVO_ENABLED          1   // Servomoteurs
+#define MODULE_DISPLAY_ENABLED        1   // Affichage LCD
+#define MODULE_API_ENABLED            1   // API REST
+#define MODULE_OTA_ENABLED            1   // Mise à jour OTA
+#define MODULE_LOGGING_ENABLED        1   // Journalisation
+#define MODULE_SENSORS_ENABLED        1   // Capteurs
+#define MODULE_AUTOPILOT_ENABLED      1   // Autopilot
+#define MODULE_WINCH_ENABLED          1   // Treuil
+
+// Les macros MODULE_X_ENABLED deviennent des variables runtime modifiables
+extern bool moduleWebserverEnabled;
+extern bool moduleWifiEnabled;
+extern bool moduleServoEnabled;
+extern bool moduleDisplayEnabled;
+extern bool moduleApiEnabled;
+extern bool moduleOtaEnabled;
+extern bool moduleLoggingEnabled;
+extern bool moduleSensorsEnabled;
+extern bool moduleAutopilotEnabled;
+extern bool moduleWinchEnabled;
+
 // === CONFIGURATION RÉSEAU ===
 
 // Configuration WiFi

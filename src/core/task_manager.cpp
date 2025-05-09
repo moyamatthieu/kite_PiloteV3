@@ -54,6 +54,9 @@
 #include "hardware/actuators/servo.h"
 #include "control/autopilot.h"  // Pour autopilotInit
 #include "core/system.h"        // Pour systemHealthCheck
+#include "ui/dashboard.h"
+#include "ui/webserver.h"
+#include "core/module.h"
 
 /* === MODULE TASK MANAGER ===
    Implémentation du gestionnaire de tâches FreeRTOS pour le système Kite PiloteV3.
@@ -84,6 +87,59 @@ TaskHandle_t TaskManager::sensorTaskHandle = nullptr;
 // Handle pour la tâche de monitoring
 TaskHandle_t monitorTaskHandle = nullptr;
 
+// Exemple d'intégration : déclaration des modules principaux
+class WiFiModule : public Module {
+public:
+    WiFiModule() : Module("WiFi", moduleWifiEnabled) {}
+    void update() override { /* gestion FSM WiFi ici */ }
+    const char* description() const override { return "Connexion WiFi"; }
+};
+class APIModule : public Module {
+public:
+    APIModule() : Module("API", moduleApiEnabled) {}
+    const char* description() const override { return "API HTTP/REST"; }
+};
+class ServoModule : public Module {
+public:
+    ServoModule() : Module("Servo", moduleServoEnabled) {}
+    const char* description() const override { return "Contrôle des servos"; }
+};
+class AutopilotModule : public Module {
+public:
+    AutopilotModule() : Module("Autopilot", moduleAutopilotEnabled) {}
+    const char* description() const override { return "Pilote automatique"; }
+};
+class WebserverModule : public Module {
+public:
+    WebserverModule() : Module("Webserver", moduleWebserverEnabled) {}
+    const char* description() const override { return "Serveur Web"; }
+};
+class WinchModule : public Module {
+public:
+    WinchModule() : Module("Winch", moduleWinchEnabled) {}
+    const char* description() const override { return "Treuil motorisé"; }
+};
+class SensorsModule : public Module {
+public:
+    SensorsModule() : Module("Sensors", moduleSensorsEnabled) {}
+    const char* description() const override { return "Capteurs IMU, vent, etc."; }
+};
+class OTAModule : public Module {
+public:
+    OTAModule() : Module("OTA", moduleOtaEnabled) {}
+    const char* description() const override { return "Mise à jour à distance"; }
+};
+
+// Instanciation globale et enregistrement automatique
+static WiFiModule wifiModule; REGISTER_MODULE(&wifiModule);
+static APIModule apiModule; REGISTER_MODULE(&apiModule);
+static ServoModule servoModule; REGISTER_MODULE(&servoModule);
+static AutopilotModule autopilotModule; REGISTER_MODULE(&autopilotModule);
+static WebserverModule webserverModule; REGISTER_MODULE(&webserverModule);
+static WinchModule winchModule; REGISTER_MODULE(&winchModule);
+static SensorsModule sensorsModule; REGISTER_MODULE(&sensorsModule);
+static OTAModule otaModule; REGISTER_MODULE(&otaModule);
+
 // === FONCTIONS ===
 
 /**
@@ -111,90 +167,7 @@ bool taskManagerAddTask(TaskDefinition task) {
 }
 
 /**
- * Démarre toutes les tâches gérées.
- */
-void taskManagerStartTasks() {
-  for (int i = 0; i < taskCount; i++) {
-    TaskDefinition* task = &tasks[i];
-    xTaskCreate(task->taskFunction, task->name, task->stackSize, NULL, task->priority, &task->handle);
-    LOG_INFO("TASK_MANAGER", "Tâche démarrée : %s", task->name);
-  }
-}
-
-/**
- * Arrête toutes les tâches gérées.
- */
-void taskManagerStopTasks() {
-  for (int i = 0; i < taskCount; i++) {
-    TaskDefinition* task = &tasks[i];
-    if (task->handle != NULL) {
-      vTaskDelete(task->handle);
-      LOG_INFO("TASK_MANAGER", "Tâche arrêtée : %s", task->name);
-      task->handle = NULL;
-    }
-  }
-}
-
-/**
- * Affiche l'état des tâches gérées.
- */
-void taskManagerPrintStatus() {
-  LOG_INFO("TASK_MANAGER", "État des tâches :");
-  for (int i = 0; i < taskCount; i++) {
-    TaskDefinition* task = &tasks[i];
-    LOG_INFO("TASK_MANAGER", "- Tâche : %s, Priorité : %d", task->name, task->priority);
-  }
-}
-
-/**
- * Initialise le gestionnaire de tâches avec les gestionnaires associés.
- * @param uiManager Gestionnaire d'interface utilisateur.
- * @param wifiManager Gestionnaire WiFi.
- * @return true si l'initialisation a réussi, false sinon.
- */
-bool TaskManager::begin(UIManager* uiManager, WiFiManager* wifiManager) {
-  // Initialisation des pointeurs statiques vers les gestionnaires
-  TaskManager::uiManager = uiManager;
-  TaskManager::wifiManager = wifiManager;
-  
-  // Initialisation des ressources partagées
-  messageQueue = xQueueCreate(10, sizeof(Message));
-  displayMutex = xSemaphoreCreateMutex();
-  
-  if (!messageQueue || !displayMutex) {
-    LOG_ERROR("TASK_MANAGER", "Échec de la création des ressources partagées");
-    return false;
-  }
-  
-  running = true;
-  LOG_INFO("TASK_MANAGER", "Gestionnaire de tâches initialisé");
-  return true;
-}
-
-/**
- * Constructeur du gestionnaire de tâches
- */
-TaskManager::TaskManager() {
-    running = false;
-    tasksRunning = false;
-    lastTaskMetricsTime = 0;
-    
-    // Initialisation des handles
-    for (int i = 0; i < MAX_TASKS; i++) {
-        taskHandles[i] = nullptr;
-        taskParams[i] = nullptr;
-    }
-}
-
-/**
- * Destructeur du gestionnaire de tâches
- */
-TaskManager::~TaskManager() {
-    stopAllTasks();
-}
-
-/**
- * Démarre toutes les tâches gérées
+ * Démarre toutes les tâches gérées dynamiquement selon l'état des modules (OOP)
  * @return true si succès, false si échec
  */
 bool TaskManager::startTasks() {
@@ -202,37 +175,70 @@ bool TaskManager::startTasks() {
         LOG_ERROR("TASK_MANAGER", "Le gestionnaire de tâches n'est pas initialisé");
         return false;
     }
-    
     if (tasksRunning) {
         LOG_WARNING("TASK_MANAGER", "Les tâches sont déjà en cours d'exécution");
         return true;
     }
-    
-    // Démarrage des tâches principales 
     BaseType_t result;
-    
-    // Ajout d'un petit délai entre les créations de tâches
     vTaskDelay(pdMS_TO_TICKS(10));
-    
-    // Tâche d'affichage (écran) - priorité élevée
-    result = xTaskCreate(
-        displayTask,
-        "Display",
-        DISPLAY_TASK_STACK_SIZE,
-        nullptr,
-        DISPLAY_TASK_PRIORITY,
-        &displayTaskHandle
-    );
-    
-    if (result != pdPASS) {
-        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche d'affichage");
-        return false;
+
+    // Nouvelle logique : démarrage dynamique selon les modules activés
+    for (Module* m : ModuleRegistry::instance().modules()) {
+        if (!m->isEnabled()) {
+            LOG_INFO("TASK_MANAGER", "Tâche %s non lancée (module désactivé)", m->name());
+            continue;
+        }
+        // Démarrage de la tâche associée au module
+        if (strcmp(m->name(), "Display") == 0) {
+            result = xTaskCreate(
+                displayTask,
+                "Display",
+                DISPLAY_TASK_STACK_SIZE,
+                nullptr,
+                DISPLAY_TASK_PRIORITY,
+                &displayTaskHandle
+            );
+        } else if (strcmp(m->name(), "WiFi") == 0) {
+            result = xTaskCreate(
+                networkTask,
+                "Network",
+                WIFI_TASK_STACK_SIZE,
+                nullptr,
+                WIFI_TASK_PRIORITY,
+                &networkTaskHandle
+            );
+        } else if (strcmp(m->name(), "Autopilot") == 0) {
+            result = xTaskCreate(
+                controlTask,
+                "Control",
+                SYSTEM_TASK_STACK_SIZE,
+                nullptr,
+                SYSTEM_TASK_PRIORITY,
+                &controlTaskHandle
+            );
+        } else if (strcmp(m->name(), "Sensors") == 0) {
+            result = xTaskCreate(
+                sensorTask,
+                "Sensors",
+                IMU_TASK_STACK_SIZE,
+                nullptr,
+                IMU_TASK_PRIORITY,
+                &sensorTaskHandle
+            );
+        } else {
+            // Pour les autres modules, prévoir une extension OOP (ex: m->startTask())
+            LOG_INFO("TASK_MANAGER", "Aucune tâche FreeRTOS directe pour le module %s", m->name());
+            continue;
+        }
+        if (result != pdPASS) {
+            LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche pour le module %s", m->name());
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+        LOG_INFO("TASK_MANAGER", "Tâche démarrée pour le module %s", m->name());
     }
-    
-    // Ajout d'un petit délai pour la synchronisation des logs
-    vTaskDelay(pdMS_TO_TICKS(10));
-    
-    // Tâche des boutons
+
+    // Tâche des boutons (toujours lancée, car UI locale indispensable)
     result = xTaskCreate(
         buttonTask,
         "Buttons",
@@ -241,13 +247,13 @@ bool TaskManager::startTasks() {
         BUTTON_TASK_PRIORITY,
         &buttonTaskHandle
     );
-    
     if (result != pdPASS) {
         LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche des boutons");
         return false;
     }
-    
-    // Tâche pour les potentiomètres
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Tâche potentiomètres (toujours lancée)
     result = xTaskCreate(
         inputTask,
         "Input",
@@ -256,58 +262,13 @@ bool TaskManager::startTasks() {
         POT_TASK_PRIORITY,
         &inputTaskHandle
     );
-    
     if (result != pdPASS) {
         LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche d'entrée");
         return false;
     }
-    
-    // Tâche de réseau WiFi
-    result = xTaskCreate(
-        networkTask,
-        "Network",
-        WIFI_TASK_STACK_SIZE,
-        nullptr,
-        WIFI_TASK_PRIORITY,
-        &networkTaskHandle
-    );
-    
-    if (result != pdPASS) {
-        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche réseau");
-        return false;
-    }
-    
-    // Tâche de contrôle
-    result = xTaskCreate(
-        controlTask,
-        "Control",
-        SYSTEM_TASK_STACK_SIZE,
-        nullptr,
-        SYSTEM_TASK_PRIORITY,
-        &controlTaskHandle
-    );
-    
-    if (result != pdPASS) {
-        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche de contrôle");
-        return false;
-    }
-    
-    // Tâche des capteurs
-    result = xTaskCreate(
-        sensorTask,
-        "Sensors",
-        IMU_TASK_STACK_SIZE,
-        nullptr,
-        IMU_TASK_PRIORITY,
-        &sensorTaskHandle
-    );
-    
-    if (result != pdPASS) {
-        LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche des capteurs");
-        return false;
-    }
-    
-    // Tâche de monitoring avec priorité basse (dernière à démarrer)
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Tâche de monitoring (toujours lancée)
     result = xTaskCreate(
         monitorTask,
         "Monitor",
@@ -316,39 +277,57 @@ bool TaskManager::startTasks() {
         1,  // Priorité basse
         &monitorTaskHandle
     );
-    
     if (result != pdPASS) {
         LOG_ERROR("TASK_MANAGER", "Échec de création de la tâche de monitoring");
         return false;
     }
-    
-    // Ajout d'un petit délai pour éviter les chevauchements de logs
     vTaskDelay(pdMS_TO_TICKS(10));
-    
+
     tasksRunning = true;
-    LOG_INFO("TASK_MANAGER", "Toutes les tâches ont été démarrées");
-    
+    LOG_INFO("TASK_MANAGER", "Toutes les tâches ont été démarrées dynamiquement (OOP)");
     return true;
 }
 
 /**
- * Arrête toutes les tâches gérées
+ * Arrête toutes les tâches gérées dynamiquement selon l'état des modules (OOP)
  */
 void TaskManager::stopTasks() {
     if (!tasksRunning) {
         return;
     }
-    
-    // Arrêt des tâches
+    // Arrêt des tâches associées aux modules activés
+    for (Module* m : ModuleRegistry::instance().modules()) {
+        if (!m->isEnabled()) continue;
+        if (strcmp(m->name(), "Display") == 0 && displayTaskHandle != nullptr) {
+            vTaskDelete(displayTaskHandle);
+            displayTaskHandle = nullptr;
+        } else if (strcmp(m->name(), "WiFi") == 0 && networkTaskHandle != nullptr) {
+            vTaskDelete(networkTaskHandle);
+            networkTaskHandle = nullptr;
+        } else if (strcmp(m->name(), "Autopilot") == 0 && controlTaskHandle != nullptr) {
+            vTaskDelete(controlTaskHandle);
+            controlTaskHandle = nullptr;
+        } else if (strcmp(m->name(), "Sensors") == 0 && sensorTaskHandle != nullptr) {
+            vTaskDelete(sensorTaskHandle);
+            sensorTaskHandle = nullptr;
+        }
+        // Pour les autres modules, prévoir une extension OOP (ex: m->stopTask())
+    }
+    // Arrêt des tâches toujours lancées
+    if (buttonTaskHandle != nullptr) {
+        vTaskDelete(buttonTaskHandle);
+        buttonTaskHandle = nullptr;
+    }
+    if (inputTaskHandle != nullptr) {
+        vTaskDelete(inputTaskHandle);
+        inputTaskHandle = nullptr;
+    }
     if (monitorTaskHandle != nullptr) {
         vTaskDelete(monitorTaskHandle);
         monitorTaskHandle = nullptr;
     }
-    
-    // Arrêt des autres tâches
-    
     tasksRunning = false;
-    LOG_INFO("TASK_MANAGER", "Toutes les tâches ont été arrêtées");
+    LOG_INFO("TASK_MANAGER", "Toutes les tâches ont été arrêtées dynamiquement (OOP)");
 }
 
 /**
@@ -663,6 +642,61 @@ void TaskManager::sensorTask(void* parameters) {
 
         // Temporisation précise
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(100)); // 100ms
+    }
+}
+
+/**
+ * Affichage dynamique de l'état des modules sur l'écran LCD 20x4
+ * Utilise displayMessage pour garantir la cohérence et la non-réentrance.
+ */
+void displayModuleStatusLCD() {
+    extern DisplayManager display;
+    if (!moduleDisplayEnabled) return;
+    char line[21];
+    display.clear();
+    display.centerText(0, "Modules actifs");
+    int row = 1;
+    for (Module* m : ModuleRegistry::instance().modules()) {
+        snprintf(line, sizeof(line), "%s: %s", m->name(), m->stateString());
+        display.centerText(row, line);
+        if (++row >= 4) break;
+    }
+    // Si moins de 3 modules, lignes vides
+    for (; row < 4; ++row) display.centerText(row, "");
+    display.updateMainDisplay();
+}
+
+/**
+ * Affichage dynamique de l'état des modules sur l'interface web (tableau de bord)
+ */
+void displayModuleStatusWeb() {
+    if (!moduleWebserverEnabled) return;
+    String html = "<h2>État des modules</h2><table border='1'><tr><th>Module</th><th>État</th><th>Description</th></tr>";
+    for (Module* m : ModuleRegistry::instance().modules()) {
+        html += String("<tr><td>") + m->name() + "</td><td>" + m->stateString() + "</td><td>" + m->description() + "</td></tr>";
+    }
+    html += "</table>";
+    LOG_INFO("WEB", "%s", html.c_str());
+}
+
+/**
+ * Permet d'activer/désactiver dynamiquement un module par son nom (menu, web, etc.)
+ */
+bool setModuleEnabled(const char* name, bool enabled) {
+    Module* m = ModuleRegistry::instance().getByName(name);
+    if (!m) return false;
+    if (enabled) m->enable();
+    else m->disable();
+    return true;
+}
+
+/**
+ * Permet de lister tous les modules et leur état (pour menu ou API web)
+ */
+void getAllModulesStatus(std::vector<std::pair<std::string, std::string>>& out) {
+    out.clear();
+    for (Module* m : ModuleRegistry::instance().modules()) {
+        out.emplace_back(m->name(), m->stateString());
     }
 }
 

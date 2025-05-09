@@ -49,6 +49,14 @@ Documenter clairement votre config.h pour que les utilisateurs (ou vous-même) s
 
 Automatiser une vérification lors des compilations pour déceler les conflits ou les incohérences potentielles entre modules.
 
+# Vision OOP et dynamique (2025)
+
+- Tous les modules sont des objets dynamiques, activables/désactivables à l'exécution.
+- Supervision centralisée via `ModuleRegistry` et reporting LCD/web/API.
+- Chaque module possède sa propre FSM, gestion d'erreur, configuration.
+- Extensible pour tout nouveau capteur/actionneur/communication.
+- Prêt pour la configuration dynamique et la supervision avancée.
+
 En résumé, à mesure que vos projets Arduino se complexifient, il devient judicieux d'adopter des outils de configuration plus dynamiques pour :
 
 - **Accélérer le prototypage et le débogage** : Ajustez rapidement des paramètres sans avoir à recompiler le code.

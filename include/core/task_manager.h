@@ -155,6 +155,10 @@ public:
     
     // Getters
     bool isRunning() const { return running; } // Retourne l'état du gestionnaire
+
+    // === API dynamique des modules ===
+    bool setModuleEnabled(const char* name, bool enabled);
+    void getAllModulesStatus(std::vector<std::pair<std::string, std::string>>& out);
 };
 
 #endif // TASK_MANAGER_H

@@ -249,6 +249,18 @@ public:
    - Développer des tests unitaires pour les fonctionnalités critiques
    - Compléter la documentation technique et utilisateur
 
+## 11. Implémentation OOP et gestion dynamique des modules (2025)
+
+- Tous les modules (capteurs, actionneurs, communication) héritent d'une base `Module`.
+- Activation/désactivation dynamique à l'exécution (menu LCD, API REST, web).
+- Chaque module encapsule sa propre FSM, gestion d'erreur, configuration.
+- Enregistrement automatique dans un `ModuleRegistry` centralisé.
+- Tâches FreeRTOS démarrées/arrêtées dynamiquement selon l'état des modules.
+- API REST `/api/v1/modules` pour piloter les modules à distance.
+- Extensibilité maximale pour l'ajout de nouveaux modules.
+
+Voir `README.md` et `logs/discussions.md` pour l'historique détaillé.
+
 ## Conclusion
 
 Le projet Kite PiloteV3 possède une base solide, mais nécessite une réorganisation substantielle pour atteindre son plein potentiel en termes de robustesse et de performances. Les recommandations présentées dans ce rapport permettront d'améliorer significativement la qualité du code, sa maintenabilité et sa fiabilité. La mise en place d'une architecture plus modulaire et l'amélioration de la gestion des erreurs constituent les priorités les plus urgentes.

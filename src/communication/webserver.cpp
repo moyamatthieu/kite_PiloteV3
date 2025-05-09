@@ -1,3 +1,5 @@
+#if MODULE_WEBSERVER_ENABLED
+
 #include "communication/kite_webserver.h"
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -110,3 +112,7 @@ void setupServerRoutes(AsyncWebServer* server) {
     server->onNotFound(handleNotFound);
     LOG_INFO("WEBS", "Routes HTTP configurées (mode optimisé)");
 }
+
+#else
+// Serveur web désactivé à la compilation (MODULE_WEBSERVER_ENABLED=0)
+#endif

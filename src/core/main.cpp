@@ -177,6 +177,7 @@ void setupWiFi() {
  * Configure et démarre le serveur web avec support OTA (optimisé)
  */
 void setupServer() {
+#if MODULE_WEBSERVER_ENABLED
   if (!wifiConnected) {
     LOG_WARNING("SERVER", "WiFi non connecté, serveur web non démarré");
     return;
@@ -215,6 +216,9 @@ void setupServer() {
            WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
   display.displayMessage("OTA", otaUrl);
   delay(1000);
+#else
+  LOG_INFO("SERVER", "Serveur web désactivé (MODULE_WEBSERVER_ENABLED=0)");
+#endif
 }
 
 /**
