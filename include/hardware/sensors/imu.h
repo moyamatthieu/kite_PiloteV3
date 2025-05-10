@@ -5,14 +5,22 @@
   
   Gestion du capteur inertiel pour mesurer l'orientation et les mouvements du kite.
   Utilise un MPU6050 pour les mesures d'accélération et de rotation.
+  
+  Version: 2.0.0
+  Date: 9 mai 2025
+  Auteurs: Équipe Kite PiloteV3
 */
 
 #ifndef IMU_H
 #define IMU_H
 
 #include <Arduino.h>
-#include <Wire.h> // Include for TwoWire and Wire object
+#include <Wire.h>
 #include "../../core/config.h"
+#include "../../core/module.h"
+#include "../../utils/state_machine.h"
+#include "../../utils/error_manager.h"
+#include <string>
 
 // === CONSTANTES IMU ===
 #define IMU_I2C_ADDR 0x68        // Adresse I2C par défaut du MPU6050
@@ -61,58 +69,127 @@ typedef enum {
   IMU_CALIBRATION_ERROR = 3     // Erreur de calibration
 } IMUCalibrationState;
 
-// === PROTOTYPES DES FONCTIONS ===
-
 /**
- * Initialise l'IMU
- * @param config Configuration optionnelle de l'IMU
- * @return true si succès, false si échec
+ * Classe IMUSensor - Gestion du capteur IMU
+ * Hérite de SensorModule pour s'intégrer dans l'architecture modulaire
  */
+class IMUSensor : public SensorModule {
+public:
+    /**
+     * Constructeur
+     */
+    IMUSensor();
+    
+    /**
+     * Destructeur
+     */
+    virtual ~IMUSensor();
+    
+    /**
+     * Initialise le capteur IMU
+     * @param config Configuration optionnelle
+     * @return true si succès, false si échec
+     */
+    bool init(const IMUConfig* config = nullptr);
+    
+    /**
+     * Lit les données du capteur
+     * Implémentation de la méthode virtuelle de SensorModule
+     */
+    void readSensor() override;
+    
+    /**
+     * Configure le capteur IMU
+     * @param jsonConfig Configuration au format JSON
+     */
+    void configure(const std::string& jsonConfig) override;
+    
+    /**
+     * Calibre le capteur IMU
+     * @return État de calibration
+     */
+    IMUCalibrationState calibrate();
+    
+    /**
+     * Obtient les dernières données lues
+     * @return Structure contenant les données IMU
+     */
+    const IMUData& getData() const;
+    
+    /**
+     * Effectue un auto-test du capteur
+     * @return true si succès, false si échec
+     */
+    bool selfTest();
+    
+    /**
+     * Met en veille ou réveille le capteur
+     * @param enable true pour mettre en veille, false pour réveiller
+     */
+    void sleep(bool enable);
+    
+    /**
+     * Retourne une description du module
+     * @return Chaîne de caractères décrivant le module
+     */
+    const char* description() const override;
+    
+    /**
+     * Lit les données brutes du capteur
+     * @param data Structure pour stocker les données
+     * @return true si succès, false si échec
+     */
+    bool readRawData(RawIMUData* data);
+
+private:
+    IMUData _lastData;              // Dernières données lues
+    IMUConfig _config;              // Configuration actuelle
+    IMUCalibrationState _calState;  // État de calibration
+    // États de la machine à états de l'IMU
+    enum IMUState {
+        IMU_STATE_IDLE = 0,
+        IMU_STATE_INIT,
+        IMU_STATE_READING,
+        IMU_STATE_CALIBRATING,
+        IMU_STATE_ERROR
+    };
+    
+    // Classe interne pour la machine à états de l'IMU
+    class IMUStateMachine : public StateMachine {
+    public:
+        IMUStateMachine(IMUSensor* parent)
+            : StateMachine("IMU_FSM", IMU_STATE_IDLE), _parent(parent) {}
+        
+    protected:
+        int processState(int state) override {
+            // Implémentation simple pour éviter l'erreur de classe abstraite
+            return state;
+        }
+        
+    private:
+        IMUSensor* _parent;
+    };
+    
+    IMUStateMachine _fsm;           // Machine à états pour les opérations asynchrones
+    char _lastError[64];            // Dernier message d'erreur
+    
+    
+    /**
+     * Traite les données brutes en données calibrées
+     * @param rawData Données brutes
+     * @param processedData Données traitées
+     */
+    void processRawData(const RawIMUData& rawData, IMUData& processedData);
+};
+
+// Fonctions C pour compatibilité avec le code existant
 bool imuInit(const IMUConfig* config = nullptr);
-
-/**
- * Calibre l'IMU
- * @return true si succès, false si échec
- */
 bool imuCalibrate();
-
-/**
- * Lit les données brutes de l'IMU
- * @param data Structure pour stocker les données brutes
- * @return true si succès, false si échec
- */
 bool imuReadRawData(RawIMUData* data);
-
-/**
- * Lit les données traitées de l'IMU
- * @param data Structure pour stocker les données traitées
- * @return true si succès, false si échec
- */
 bool imuReadProcessedData(IMUData* data);
-
-/**
- * Configure l'IMU
- * @param config Configuration à appliquer
- * @return true si succès, false si échec
- */
 bool imuConfigure(const IMUConfig* config);
-
-/**
- * Effectue un auto-test de l'IMU
- * @return true si succès, false si échec
- */
 bool imuSelfTest();
-
-/**
- * Obtient le dernier message d'erreur de l'IMU
- * @return Chaîne de caractères contenant l'erreur
- */
 const char* imuGetLastError();
-
-/**
- * Met en veille ou réveille l'IMU
- * @param enable true pour mettre en veille, false pour réveiller
- */
 void imuSleep(bool enable);
 
 #endif // IMU_H

@@ -12,51 +12,68 @@
 
 #include "hardware/sensors/wind.h"
 #include "core/module.h"
-#include "utils/state_machine.h"
 #include "utils/error_manager.h"
 #include <string>
 
-class WindSensorModule : public SensorModule {
-public:
-    WindSensorModule() : SensorModule("Wind"), fsm("Wind_FSM"), errorManager("Wind") {}
+// Implémentation des fonctions du module wind
+bool windInit() {
+    // Initialisation du capteur de vent
+    return true;
+}
 
-    void enable() override {
-        SensorModule::enable();
-        fsm.setState("IDLE");
-    }
-    void disable() override {
-        SensorModule::disable();
-        fsm.setState("DISABLED");
-    }
-    void update() override {
-        fsm.tick();
-        if (!isEnabled()) return;
-        readSensor();
-    }
+WindData windReadProcessedData() {
+    WindData data;
+    
+    // Simuler la lecture des données
+    data.speed = 5.0f;       // 5 m/s
+    data.direction = 180.0f; // 180 degrés (sud)
+    data.gust = 7.5f;        // 7.5 m/s
+    data.timestamp = millis();
+    data.isValid = true;
+    
+    return data;
+}
+
+// Classe pour le module de vent
+class WindModule : public SensorModule {
+public:
+    WindModule() : SensorModule("Wind") {}
+
     void readSensor() override {
-        // Logique de lecture du capteur de vent, gestion d'erreur
         if (!windInit()) {
-            errorManager.reportError("Wind init failed");
-            setState(State::ERROR);
+            // Utiliser l'instance singleton d'ErrorManager
+            ErrorManager::getInstance()->reportError(
+                ErrorCode::SENSOR_ERROR,
+                "Wind",
+                "Wind initialization failed"
+            );
+            setState(State::MODULE_ERROR);
             return;
         }
-        WindData data;
-        if (!windReadProcessedData(&data)) {
-            errorManager.reportError("Wind read failed");
-            setState(State::ERROR);
+        
+        WindData data = windReadProcessedData();
+        if (!data.isValid) {
+            ErrorManager::getInstance()->reportError(
+                ErrorCode::SENSOR_ERROR,
+                "Wind",
+                "Wind read failed"
+            );
+            setState(State::MODULE_ERROR);
             return;
         }
-        setState(State::ENABLED);
+        
+        setState(State::MODULE_ENABLED);
     }
+    
     void configure(const std::string& jsonConfig) override {
         // Appliquer la configuration Wind à partir d'un JSON
     }
-    const char* description() const override { return "Capteur de vent"; }
-private:
-    StateMachine fsm;
-    ErrorManager errorManager;
+    
+    const char* description() const override {
+        return "Capteur de vent";
+    }
 };
 
 // Instanciation globale et enregistrement
-static WindSensorModule windModule;
-REGISTER_MODULE(&windModule);
+static WindModule windModule;
+REGISTER_MODULE(windModule, &windModule);

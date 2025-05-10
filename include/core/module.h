@@ -86,10 +86,10 @@ private:
 };
 
 // Macro pour enregistrement automatique d'un module global
-#define REGISTER_MODULE(MODULE_PTR) \
-    static struct ModuleAutoRegister_##MODULE_PTR##_t { \
-        ModuleAutoRegister_##MODULE_PTR##_t() { ModuleRegistry::instance().registerModule(MODULE_PTR); } \
-    } _autoRegister_##MODULE_PTR;
+#define REGISTER_MODULE(MODULE_NAME, MODULE_PTR) \
+    static struct ModuleAutoRegister_##MODULE_NAME##_t { \
+        ModuleAutoRegister_##MODULE_NAME##_t() { ModuleRegistry::instance().registerModule(MODULE_PTR); } \
+    } _autoRegister_##MODULE_NAME;
 
 // Classe de base pour les modules capteurs
 class SensorModule : public Module {

@@ -40,7 +40,7 @@
 #define configUSE_STATS_FORMATTING_FUNCTIONS 1
 
 #include "../../include/core/task_manager.h"
-#include "utils/logging.h"
+#include "../../include/utils/logging.h"
 #include "communication/wifi_manager.h"
 #include "../../include/communication/wifi_manager.h"
 #include <ElegantOTA.h>
@@ -57,6 +57,11 @@
 #include "ui/dashboard.h"
 #include "ui/webserver.h"
 #include "core/module.h"
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <algorithm>
+#include <algorithm>
 
 /* === MODULE TASK MANAGER ===
    Implémentation du gestionnaire de tâches FreeRTOS pour le système Kite PiloteV3.
@@ -64,7 +69,6 @@
 */
 
 #include "../../include/core/task_manager.h"
-#include "../../include/utils/logging.h"
 
 // === VARIABLES GLOBALES ===
 static TaskDefinition tasks[MAX_TASKS]; // Tableau des tâches gérées
@@ -131,23 +135,89 @@ public:
 };
 
 // Instanciation globale et enregistrement automatique
-static WiFiModule wifiModule; REGISTER_MODULE(&wifiModule);
-static APIModule apiModule; REGISTER_MODULE(&apiModule);
-static ServoModule servoModule; REGISTER_MODULE(&servoModule);
-static AutopilotModule autopilotModule; REGISTER_MODULE(&autopilotModule);
-static WebserverModule webserverModule; REGISTER_MODULE(&webserverModule);
-static WinchModule winchModule; REGISTER_MODULE(&winchModule);
-static SensorsModule sensorsModule; REGISTER_MODULE(&sensorsModule);
-static OTAModule otaModule; REGISTER_MODULE(&otaModule);
+static WiFiModule wifiModule; REGISTER_MODULE(wifiModule, &wifiModule);
+static APIModule apiModule; REGISTER_MODULE(apiModule, &apiModule);
+static ServoModule servoModule; REGISTER_MODULE(servoModule, &servoModule);
+static AutopilotModule autopilotModule; REGISTER_MODULE(autopilotModule, &autopilotModule);
+static WebserverModule webserverModule; REGISTER_MODULE(webserverModule, &webserverModule);
+static WinchModule winchModule; REGISTER_MODULE(winchModule, &winchModule);
+static SensorsModule sensorsModule; REGISTER_MODULE(sensorsModule, &sensorsModule);
+static OTAModule otaModule; REGISTER_MODULE(otaModule, &otaModule);
 
 // === FONCTIONS ===
+
+/**
+ * Constructeur du gestionnaire de tâches
+ */
+TaskManager::TaskManager() {
+    running = false;
+    tasksRunning = false;
+    lastTaskMetricsTime = 0;
+    
+    // Initialisation des tableaux
+    for (int i = 0; i < MAX_TASKS; i++) {
+        taskHandles[i] = nullptr;
+        taskParams[i] = nullptr;
+        memset(&taskStats[i], 0, sizeof(TaskStat));
+    }
+    
+    // Initialisation des handles
+    wifiMonitorTaskHandle = nullptr;
+    systemMonitorTaskHandle = nullptr;
+    
+    logPrint((LogLevel)LOG_LEVEL_INFO, "TASK_MANAGER", "Gestionnaire de tâches créé");
+}
+
+/**
+ * Destructeur du gestionnaire de tâches
+ */
+TaskManager::~TaskManager() {
+    stopAllTasks();
+    logPrint((LogLevel)LOG_LEVEL_INFO, "TASK_MANAGER", "Gestionnaire de tâches détruit");
+}
+
+/**
+ * Initialise le gestionnaire de tâches avec les gestionnaires associés
+ * @param ui Pointeur vers le gestionnaire d'interface utilisateur
+ * @param wifi Pointeur vers le gestionnaire WiFi
+ * @return true si succès, false si échec
+ */
+bool TaskManager::begin(UIManager* ui, WiFiManager* wifi) {
+    if (running) {
+        logPrint((LogLevel)LOG_LEVEL_WARNING, "TASK_MANAGER", "Le gestionnaire de tâches est déjà initialisé");
+        return true;
+    }
+    
+    // Enregistrement des gestionnaires
+    uiManager = ui;
+    wifiManager = wifi;
+    
+    // Création des ressources partagées
+    messageQueue = xQueueCreate(10, sizeof(Message));
+    if (messageQueue == nullptr) {
+        logPrint((LogLevel)LOG_LEVEL_ERROR, "TASK_MANAGER", "Échec de création de la file de messages");
+        return false;
+    }
+    
+    displayMutex = xSemaphoreCreateMutex();
+    if (displayMutex == nullptr) {
+        logPrint((LogLevel)LOG_LEVEL_ERROR, "TASK_MANAGER", "Échec de création du mutex d'affichage");
+        vQueueDelete(messageQueue);
+        messageQueue = nullptr;
+        return false;
+    }
+    
+    running = true;
+    logPrint((LogLevel)LOG_LEVEL_INFO, "TASK_MANAGER", "Gestionnaire de tâches initialisé avec succès");
+    return true;
+}
 
 /**
  * Initialise le gestionnaire de tâches.
  */
 void taskManagerInit() {
   taskCount = 0;
-  LOG_INFO("TASK_MANAGER", "Gestionnaire de tâches initialisé");
+  logPrint((LogLevel)LOG_LEVEL_INFO, "TASK_MANAGER", "Gestionnaire de tâches initialisé");
 }
 
 /**
@@ -157,12 +227,12 @@ void taskManagerInit() {
  */
 bool taskManagerAddTask(TaskDefinition task) {
   if (taskCount >= MAX_TASKS) {
-    LOG_ERROR("TASK_MANAGER", "Nombre maximum de tâches atteint");
+    logPrint((LogLevel)LOG_LEVEL_ERROR, "TASK_MANAGER", "Nombre maximum de tâches atteint");
     return false;
   }
 
   tasks[taskCount++] = task;
-  LOG_INFO("TASK_MANAGER", "Tâche ajoutée : %s", task.name);
+  logPrint((LogLevel)LOG_LEVEL_INFO, "TASK_MANAGER", "Tâche ajoutée : %s", task.name);
   return true;
 }
 
@@ -693,6 +763,9 @@ bool setModuleEnabled(const char* name, bool enabled) {
 /**
  * Permet de lister tous les modules et leur état (pour menu ou API web)
  */
+#include <vector>
+#include <string>
+
 void getAllModulesStatus(std::vector<std::pair<std::string, std::string>>& out) {
     out.clear();
     for (Module* m : ModuleRegistry::instance().modules()) {
@@ -714,4 +787,22 @@ void TaskManager::updateTaskMetrics() {
 bool TaskManager::checkTasksHealth() {
     // Code pour vérifier l'état de santé des tâches
     return true;
+}
+
+/**
+ * Permet d'activer/désactiver dynamiquement un module par son nom
+ * @param name Nom du module
+ * @param enabled true pour activer, false pour désactiver
+ * @return true si succès, false si échec
+ */
+bool TaskManager::setModuleEnabled(const char* name, bool enabled) {
+    return ::setModuleEnabled(name, enabled);
+}
+
+/**
+ * Permet de lister tous les modules et leur état
+ * @param out Vecteur de paires (nom, état) à remplir
+ */
+void TaskManager::getAllModulesStatus(std::vector<std::pair<std::string, std::string>>& out) {
+    ::getAllModulesStatus(out);
 }

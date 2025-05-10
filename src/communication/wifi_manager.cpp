@@ -70,41 +70,262 @@
 #include "core/module.h"
 #include "utils/state_machine.h"
 #include "utils/error_manager.h"
+#include "core/logging.h"
 #include <string>
 
+// Implémentation de la classe WiFiManager
+WiFiManager::WiFiManager() {
+    memset(ssid, 0, sizeof(ssid));
+    memset(password, 0, sizeof(password));
+    connected = false;
+    apActive = false;
+    lastConnectAttempt = 0;
+    timeout = 10000;
+}
+
+WiFiManager::~WiFiManager() {
+    stop();
+}
+
+bool WiFiManager::begin(const char* ssid, const char* password, uint32_t timeout) {
+    if (ssid == nullptr) {
+        LOG_ERROR("WIFI", "SSID ne peut pas être null");
+        return false;
+    }
+    
+    // Copier les identifiants
+    strncpy(this->ssid, ssid, sizeof(this->ssid) - 1);
+    this->ssid[sizeof(this->ssid) - 1] = '\0';
+    
+    if (password != nullptr) {
+        strncpy(this->password, password, sizeof(this->password) - 1);
+        this->password[sizeof(this->password) - 1] = '\0';
+    } else {
+        this->password[0] = '\0';
+    }
+    
+    this->timeout = timeout;
+    
+    // Initialisation du WiFi
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
+    WiFi.setSleep(true);
+    
+    // Démarrer la connexion
+    lastConnectAttempt = millis();
+    WiFi.begin(this->ssid, this->password);
+    
+    // Attendre la connexion avec un timeout
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
+        delay(100);
+    }
+    
+    // Vérifier si la connexion a réussi
+    connected = (WiFi.status() == WL_CONNECTED);
+    
+    if (connected) {
+        LOG_INFO("WIFI", "Connecté à %s, IP: %s",
+                this->ssid, WiFi.localIP().toString().c_str());
+    } else {
+        LOG_WARNING("WIFI", "Échec de connexion à %s", this->ssid);
+    }
+    
+    return connected;
+}
+
+void WiFiManager::stop() {
+    if (apActive) {
+        stopAP();
+    }
+    
+    WiFi.disconnect(true);
+    connected = false;
+    LOG_INFO("WIFI", "WiFi déconnecté");
+}
+
+bool WiFiManager::isConnected() {
+    updateConnectionStatus();
+    return connected;
+}
+
+bool WiFiManager::reconnect(uint32_t timeout) {
+    if (connected) {
+        return true;
+    }
+    
+    lastConnectAttempt = millis();
+    WiFi.reconnect();
+    
+    // Attendre la connexion avec un timeout
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
+        delay(100);
+    }
+    
+    // Vérifier si la connexion a réussi
+    connected = (WiFi.status() == WL_CONNECTED);
+    
+    if (connected) {
+        LOG_INFO("WIFI", "Reconnecté à %s", ssid);
+    } else {
+        LOG_WARNING("WIFI", "Échec de reconnexion à %s", ssid);
+    }
+    
+    return connected;
+}
+
+void WiFiManager::setCredentials(const char* ssid, const char* password) {
+    if (ssid != nullptr) {
+        strncpy(this->ssid, ssid, sizeof(this->ssid) - 1);
+        this->ssid[sizeof(this->ssid) - 1] = '\0';
+    }
+    
+    if (password != nullptr) {
+        strncpy(this->password, password, sizeof(this->password) - 1);
+        this->password[sizeof(this->password) - 1] = '\0';
+    } else {
+        this->password[0] = '\0';
+    }
+}
+
+String WiFiManager::getSSID() {
+    return String(ssid);
+}
+
+IPAddress WiFiManager::getLocalIP() {
+    return WiFi.localIP();
+}
+
+int32_t WiFiManager::getRSSI() {
+    return WiFi.RSSI();
+}
+
+bool WiFiManager::startAP(const char* ssid, const char* password) {
+    if (ssid == nullptr) {
+        LOG_ERROR("WIFI", "SSID ne peut pas être null pour le mode AP");
+        return false;
+    }
+    
+    // Arrêter le mode station s'il est actif
+    if (connected) {
+        WiFi.disconnect(true);
+        connected = false;
+    }
+    
+    // Configurer le mode AP
+    WiFi.mode(WIFI_AP);
+    
+    // Démarrer le point d'accès
+    bool success;
+    if (password != nullptr && strlen(password) >= 8) {
+        success = WiFi.softAP(ssid, password);
+    } else {
+        success = WiFi.softAP(ssid);
+    }
+    
+    if (success) {
+        apActive = true;
+        LOG_INFO("WIFI", "Point d'accès démarré: %s, IP: %s",
+                ssid, WiFi.softAPIP().toString().c_str());
+    } else {
+        LOG_ERROR("WIFI", "Échec du démarrage du point d'accès");
+    }
+    
+    return success;
+}
+
+void WiFiManager::stopAP() {
+    if (apActive) {
+        WiFi.softAPdisconnect(true);
+        apActive = false;
+        LOG_INFO("WIFI", "Point d'accès arrêté");
+    }
+}
+
+bool WiFiManager::isAPActive() {
+    return apActive;
+}
+
+void WiFiManager::handleFSM() {
+    // Vérifier l'état de la connexion
+    updateConnectionStatus();
+    
+    // Logique de la machine à états pour gérer la connexion WiFi
+    // Cette méthode est appelée régulièrement par le TaskManager
+    
+    // Si la connexion est perdue, tenter de reconnecter
+    if (!connected && !apActive && millis() - lastConnectAttempt > 30000) {
+        reconnect(timeout);
+    }
+}
+
+void WiFiManager::updateConnectionStatus() {
+    connected = (WiFi.status() == WL_CONNECTED);
+}
+
+// Implémentation de la fonction wifiManagerInit
+void wifiManagerInit() {
+    // Initialisation du WiFi avec les paramètres par défaut
+    WiFi.mode(WIFI_STA);
+    
+    // Configuration de base
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
+    
+    // Optimisation de la consommation d'énergie
+    WiFi.setSleep(true);
+    
+    // Initialisation terminée
+    LOG_INFO("WIFI", "WiFi Manager initialisé");
+}
+
+// Module WiFi
 class WiFiCommunicationModule : public Module {
 public:
-    WiFiCommunicationModule() : Module("WiFi"), fsm("WiFi_FSM"), errorManager("WiFi") {}
+    WiFiCommunicationModule() : Module("WiFi"), fsm("WiFi_FSM", 0), errorManager(*ErrorManager::getInstance()) {}
+    
     void enable() override {
         Module::enable();
-        fsm.setState("IDLE");
+        fsm.transitionTo(0, 0, "Enable");
     }
+    
     void disable() override {
         Module::disable();
-        fsm.setState("DISABLED");
+        fsm.transitionTo(-1, 0, "Disable");
     }
+    
     void update() override {
-        fsm.tick();
+        fsm.update();
         if (!isEnabled()) return;
-        handleFSM();
-    }
-    void handleFSM() {
-        // Logique de gestion de la connexion WiFi, gestion d'erreur
-        if (!wifiInit()) {
-            errorManager.reportError("WiFi init failed");
-            setState(State::ERROR);
-            return;
+        
+        // Appeler la méthode handleFSM du WiFiManager global
+        if (WiFiManager::getInstance() != nullptr) {
+            WiFiManager::getInstance()->handleFSM();
         }
-        // ... gestion de la connexion, reconnexion, etc.
-        setState(State::ENABLED);
     }
+    
     void configure(const std::string& jsonConfig) {
         // Appliquer la configuration WiFi à partir d'un JSON
     }
+    
     const char* description() const override { return "Module WiFi (communication)"; }
+    
 private:
-    StateMachine fsm;
-    ErrorManager errorManager;
+    class WiFiFSM : public StateMachine {
+    public:
+        WiFiFSM(const char* name, int initialState) : StateMachine(name, initialState) {}
+    protected:
+        int processState(int state) override {
+            // Implémenter la logique d'état ici
+            return state;
+        }
+    };
+    
+    WiFiFSM fsm;
+    ErrorManager& errorManager;
 };
+
 static WiFiCommunicationModule wifiModule;
-REGISTER_MODULE(&wifiModule);
+REGISTER_MODULE(wifiModule, &wifiModule);

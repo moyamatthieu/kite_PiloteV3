@@ -41,7 +41,7 @@
 #include <FastAccelStepper.h>    // Bibliothèque pour le moteur pas à pas
 
 // === INCLUSIONS DES MODULES CENTRAUX DU PROJET ===
-#include "core/logging.h"        // Fonctions et macros de journalisation
+#include "utils/logging.h"       // Fonctions et macros de journalisation
 #include "core/config.h"         // Constantes de configuration globale (pins, timings)
 #include "core/system.h"         // Gestion de l'état système et watchdog
 #include "core/task_manager.h"   // Orchestration des tâches FreeRTOS
@@ -63,7 +63,7 @@
 
 // === INCLUSIONS MODULES COMMUNICATION ===
 #include "communication/kite_webserver.h"
-#include "communication/api.h"
+#include "communication/api_manager.h"
 #include "communication/wifi_manager.h" // Ajout de l'en-tête wifi_manager.h
 
 // === INCLUSIONS MODULES CONTROL ===
@@ -327,35 +327,7 @@ void onOTAProgress(size_t current, size_t final) {
  * @param success true si la mise à jour a réussi, false sinon
  */
 void onOTAEnd(bool success) {
-  // LED éteinte après la mise à jour
-  digitalWrite(LED_PIN, LOW);
-  
-  display.displayOTAStatus(success);
-  
-  if (success) {
-    LOG_INFO("OTA", "Mise à jour terminée avec succès");
-    
-    // Double clignotement pour indiquer le succès
-    for (int i = 0; i < 2; i++) {
-      digitalWrite(LED_PIN, HIGH);
-      delay(50);
-      digitalWrite(LED_PIN, LOW);
-      delay(50);
-    }
-    
-    // Redémarrer après une courte pause
-    systemRestart(3000);
-  } else {
-    LOG_ERROR("OTA", "Erreur durant la mise à jour OTA");
-    
-    // Clignotement rapide pour indiquer l'erreur
-    for (int i = 0; i < 5; i++) {
-      digitalWrite(LED_PIN, HIGH);
-      delay(25);
-      digitalWrite(LED_PIN, LOW);
-      delay(25);
-    }
-  }
+    OTAManager::handleOTAEnd(success, LED_PIN, display);
 }
 
 /**
@@ -380,7 +352,7 @@ void setup() {
     delay(100); // Court délai pour que le moniteur série s'initialise
     
     // Initialisation des logs (premier composant à initialiser)
-    logInit((LogLevel)LOG_LEVEL_INFO, 115200);
+    logInit(LOG_LEVEL_INFO, 115200);
     LOG_INFO("INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
     
     // Configuration des broches de diagnostic (LED uniquement)

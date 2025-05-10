@@ -68,42 +68,28 @@
 #include "utils/error_manager.h"
 #include <string>
 
-class ServoActuatorModule : public ActuatorModule {
-public:
-    ServoActuatorModule() : ActuatorModule("Servo"), fsm("Servo_FSM"), errorManager("Servo") {}
 
-    void enable() override {
-        ActuatorModule::enable();
-        fsm.setState("IDLE");
-    }
-    void disable() override {
-        ActuatorModule::disable();
-        fsm.setState("DISABLED");
-    }
-    void update() override {
-        fsm.tick();
-        if (!isEnabled()) return;
-        actuate();
-    }
-    void actuate() override {
-        if (!servoInit()) {
-            errorManager.reportError("Servo init failed");
-            setState(State::ERROR);
-            return;
-        }
-        // Exécution de la commande servo
-        // ...
-        setState(State::ENABLED);
-    }
-    void configure(const std::string& jsonConfig) override {
-        // Appliquer la configuration Servo à partir d'un JSON
-    }
-    const char* description() const override { return "Actionneur Servo"; }
-private:
-    StateMachine fsm;
-    ErrorManager errorManager;
-};
+// Implémentation des fonctions du module servo
+bool servoInit() {
+    // Initialisation des servomoteurs
+    return true;
+}
+
+void servoSetAngle(int servo, float angle) {
+    // Définir l'angle du servomoteur
+}
+
+// Fonctions supplémentaires requises par le système
+bool servoInitAll() {
+    // Initialisation de tous les servomoteurs
+    return servoInit();
+}
+
+void servoInitialize() {
+    // Initialisation complète du système de servomoteurs
+    servoInitAll();
+}
 
 // Instanciation globale et enregistrement
-static ServoActuatorModule servoModule;
-REGISTER_MODULE(&servoModule);
+// static ServoActuatorModule servoModule;
+// REGISTER_MODULE(servoModule, &servoModule);

@@ -1,6 +1,6 @@
-// config.cpp
+ // config.cpp
 
-#include "config.h"
+#include "core/config.h"
 
 // Définition des variables runtime d'activation des modules
 bool moduleWebserverEnabled = (MODULE_WEBSERVER_ENABLED != 0);

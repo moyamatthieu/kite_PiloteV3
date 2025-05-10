@@ -1,32 +1,18 @@
-#include "ui/webserver.h"
-#include "core/module.h"
-#include "utils/state_machine.h"
-#include "utils/error_manager.h"
-#include <string>
+#include "../../include/ui/webserver.h"
+#include "../../include/core/logging.h"
 
-class WebserverCommunicationModule : public Module {
-public:
-    WebserverCommunicationModule() : Module("Webserver"), fsm("Webserver_FSM"), errorManager("Webserver") {}
-    void enable() override {
-        Module::enable();
-        fsm.setState("IDLE");
-    }
-    void disable() override {
-        Module::disable();
-        fsm.setState("DISABLED");
-    }
-    void update() override {
-        fsm.tick();
-        if (!isEnabled()) return;
-        // handleWebserver();
-    }
-    void configure(const std::string& jsonConfig) {
-        // Appliquer la configuration Webserver à partir d'un JSON
-    }
-    const char* description() const override { return "Serveur Web (communication)"; }
-private:
-    StateMachine fsm;
-    ErrorManager errorManager;
-};
-static WebserverCommunicationModule webserverModule;
-REGISTER_MODULE(&webserverModule);
+Webserver::Webserver(int port) : server(port), _port(port) {}
+
+void Webserver::begin() {
+    server.begin();
+    LOG_INFO("WEBSERVER", "Serveur web démarré sur le port %d", _port);
+}
+
+void Webserver::handleClient() {
+    // La gestion des clients est gérée automatiquement par AsyncWebServer
+}
+
+void Webserver::stop() {
+    server.end();
+    LOG_INFO("WEBSERVER", "Serveur web arrêté");
+}

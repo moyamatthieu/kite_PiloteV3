@@ -38,6 +38,8 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <vector>
+#include <string>
 #include "config.h"
 #include "hardware/io/ui_manager.h"
 #include "communication/wifi_manager.h"

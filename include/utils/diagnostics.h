@@ -128,4 +128,11 @@ namespace DiagnosticsComponents {
     constexpr const char* BATTERY = "BATTERY";
 }
 
+class DisplayManager;
+
+class OTAManager {
+public:
+    static void handleOTAEnd(bool success, int ledPin, DisplayManager& display);
+};
+
 #endif // DIAGNOSTICS_H

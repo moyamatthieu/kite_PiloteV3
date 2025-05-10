@@ -13,6 +13,12 @@ public:
     WiFiManager();
     ~WiFiManager();
     
+    // Singleton
+    static WiFiManager* getInstance() {
+        static WiFiManager instance;
+        return &instance;
+    }
+    
     // Initialisation
     bool begin(const char* ssid, const char* password, uint32_t timeout = 10000);
     void stop();
@@ -43,7 +49,7 @@ private:
     bool apActive;           // Mode AP actif
     unsigned long lastConnectAttempt; // Timestamp de la dernière tentative
     uint32_t timeout;        // Timeout for operations
-    WiFiFSM* wifiFsm;        // Ajout du membre FSM
+    // WiFiFSM* wifiFsm;        // Suppression du membre FSM non défini
     
     // Méthodes privées
     void updateConnectionStatus();
