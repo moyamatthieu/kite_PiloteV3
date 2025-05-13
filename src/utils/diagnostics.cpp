@@ -2,6 +2,34 @@
 #include "../../include/utils/logging.h"
 #include "../../include/hardware/io/display_manager.h"
 #include "../../include/core/system.h"
+#include "utils/diagnostics.h"
+#include "utils/logging.h" // Pour LOG_INFO, LOG_ERROR
+#include <Wire.h>          // Pour la communication I2C
+
+// Implémentation de la fonction de scan du bus I2C
+void scanI2CBus() {
+  LOG_INFO("I2C_SCAN", "Scanning I2C bus...");
+  byte error, address;
+  int nDevices;
+
+  nDevices = 0;
+  for(address = 1; address < 127; address++ ) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0) {
+      LOG_INFO("I2C_SCAN", "I2C device found at address 0x%02X", address);
+      nDevices++;
+    } else if (error==4) {
+      // Ne pas logger une erreur ici, car c'est normal de ne pas trouver de périphérique lors d'un scan
+    }    
+  }
+  if (nDevices == 0) {
+    LOG_INFO("I2C_SCAN", "No I2C devices found on the bus.");
+  } else {
+    LOG_INFO("I2C_SCAN", "Scan complete. Found %d device(s).", nDevices);
+  }
+}
 
 void OTAManager::handleOTAEnd(bool success, int ledPin, DisplayManager& display) {
     // LED éteinte après la mise à jour

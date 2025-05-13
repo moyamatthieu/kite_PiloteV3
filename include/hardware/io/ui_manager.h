@@ -21,7 +21,7 @@
 #include "display_manager.h"
 
 #ifndef MAX_BUTTONS
-#define MAX_BUTTONS 3  // Nombre maximum de boutons
+#define MAX_BUTTONS 4  // Nombre maximum de boutons (corrigé de 3 à 4)
 #endif
 
 // Constantes pour la gestion de l'interface utilisateur
@@ -52,7 +52,7 @@ enum MenuState {
 // Gestionnaire unifié de l'interface utilisateur
 class UIManager {
 public:
-    UIManager();
+    UIManager(DisplayManager* globalDisplay); // Modifié pour prendre un pointeur vers le DisplayManager global
     ~UIManager();
     
     // Initialisation
@@ -68,7 +68,7 @@ public:
     void displayMessage(const char* title, const char* message);
     void displayWiFiInfo(const String& ssid, const IPAddress& ip);
     void displaySystemStats();
-    void createCustomChars();
+    // void createCustomChars(); // Commenté pour l'instant pour éviter les conflits
     
     // Méthodes utilitaires pour l'affichage
     void drawProgressBar(uint8_t row, uint8_t percent);
@@ -96,15 +96,13 @@ public:
         displayNeedsUpdate = true;
     }
     void setDisplayNeedsUpdate(bool update) { displayNeedsUpdate = update; }
-    bool isInitialized() const { return lcdInitialized; }
+    bool isInitialized() const { return lcdInitialized && associatedDisplay && associatedDisplay->isSuccessfullyInitialized(); }
     
 private:
-    // Composants matériels
-    LiquidCrystal_I2C lcd;
-    DisplayManager display; // Gestionnaire de l'écran LCD
-    
-    // État de l'interface
-    bool lcdInitialized;
+    DisplayManager* associatedDisplay; // Pointeur vers le DisplayManager global/associé
+    // LiquidCrystal_I2C lcd; // Supprimé, UIManager utilise le DisplayManager fourni
+    // DisplayManager display; // Supprimé, remplacé par associatedDisplay
+    bool lcdInitialized;       // Indique si l'écran associé est prêt ET si UIManager est prêt
     bool displayNeedsUpdate;
     DisplayState currentDisplayState;
     MenuState currentMenu;

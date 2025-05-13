@@ -60,8 +60,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <algorithm>
-#include <algorithm>
+
 
 /* === MODULE TASK MANAGER ===
    Implémentation du gestionnaire de tâches FreeRTOS pour le système Kite PiloteV3.

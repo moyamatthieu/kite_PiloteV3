@@ -14,6 +14,8 @@
 #define UTILS_LOGGING_H
 
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h> // Pour les sémaphores/mutex
 
 // Niveaux de journalisation
 typedef uint8_t LogLevel;
@@ -43,6 +45,7 @@ class LoggingModule {
 private:
     // Instance unique (pattern Singleton)
     static LoggingModule* _instance;
+    SemaphoreHandle_t _logMutex; // Mutex pour la journalisation
     
     // Constructeur privé (pattern Singleton)
     LoggingModule();
@@ -52,6 +55,7 @@ private:
     
     // Timestamp de démarrage pour calculer le temps relatif
     unsigned long _startTime;
+    unsigned long _logMessageId; // Ajout de l'ID de message
     
     // Buffer pour les messages
     char* _logBuffer;
@@ -104,6 +108,15 @@ public:
      * @param ... Arguments variables pour le format
      */
     void print(LogLevel level, const char* tag, const char* format, ...);
+    
+    /**
+     * Affiche un message de journalisation formaté avec va_list
+     * @param level Niveau de journalisation du message
+     * @param tag Étiquette identifiant la source du message
+     * @param format Format du message (comme printf)
+     * @param args Liste d'arguments variables
+     */
+    void vprint(LogLevel level, const char* tag, const char* format, va_list args);
     
     /**
      * Obtient une représentation texte d'un niveau de journalisation

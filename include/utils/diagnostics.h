@@ -7,6 +7,9 @@
 #include <vector>
 #include <functional>
 
+// Déclaration de la fonction de scan du bus I2C
+void scanI2CBus();
+
 /**
  * @brief Enum représentant l'état de santé d'un composant
  */

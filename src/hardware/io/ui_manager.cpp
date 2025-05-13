@@ -17,31 +17,10 @@
 #include <vector>
 #include <string>
 
-// Caractères personnalisés pour l'affichage
-const uint8_t charDirection[] = {
-    0b00100, 0b01110, 0b11111, 0b00100,
-    0b00100, 0b00100, 0b00100, 0b00000
-};
-
-const uint8_t charLeft[] = {
-    0b00010, 0b00100, 0b01000, 0b10000,
-    0b01000, 0b00100, 0b00010, 0b00000
-};
-
-const uint8_t charRight[] = {
-    0b01000, 0b00100, 0b00010, 0b00001,
-    0b00010, 0b00100, 0b01000, 0b00000
-};
-
-const uint8_t charBlock[] = {
-    0b11111, 0b11111, 0b11111, 0b11111,
-    0b11111, 0b11111, 0b11111, 0b11111
-};
-
 // Constructeur
-UIManager::UIManager()
-    : lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS),
-      lcdInitialized(false),
+UIManager::UIManager(DisplayManager* globalDisplay) // Modifié pour prendre un DisplayManager global
+    : associatedDisplay(globalDisplay), // Stocke le pointeur vers le DisplayManager global
+      lcdInitialized(false), // Sera mis à true dans begin() si l'écran associé est prêt
       displayNeedsUpdate(true),
       currentDisplayState(DISPLAY_MAIN),
       currentMenu(MENU_MAIN),
@@ -67,16 +46,38 @@ UIManager::~UIManager() {
  * @return true si l'initialisation réussit, false sinon
  */
 bool UIManager::begin() {
-    // Initialiser le LCD via DisplayManager
-    bool lcdInitialized = display.isInitialized();
-    
-    if (!lcdInitialized) {
-        // Si l'écran n'est pas déjà initialisé, essayer de l'initialiser
-        display.setupI2C();
-        lcdInitialized = display.initLCD();
-        if (lcdInitialized) {
-            display.createCustomChars();
+    if (!associatedDisplay) {
+        LOG_ERROR("UI_MGR", "DisplayManager associé non fourni (null). Abandon de l'initialisation de UIManager.");
+        this->lcdInitialized = false;
+        return false;
+    }
+
+    LOG_INFO("UI_MGR", "UIManager::begin() utilise le DisplayManager externe.");
+
+    unsigned long uiMgrStartTime = millis();
+    const unsigned long uiMgrTimeout = 3000; // Court timeout pour que UIManager attende l'écran si besoin.
+
+    while (!associatedDisplay->isSuccessfullyInitialized()) {
+        associatedDisplay->update(); // Donne une chance à la FSM de l'écran de progresser
+        if (millis() - uiMgrStartTime > uiMgrTimeout) {
+            LOG_ERROR("UI_MGR", "Timeout en attendant que le DisplayManager associé soit prêt.");
+            this->lcdInitialized = false; // Marquer UIManager comme non initialisé si l'écran ne l'est pas
+            return false;
         }
+        if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+            vTaskDelay(pdMS_TO_TICKS(20)); 
+        } else {
+            delay(20); 
+        }
+    }
+    
+    this->lcdInitialized = associatedDisplay->isSuccessfullyInitialized();
+
+    if (this->lcdInitialized) {
+        LOG_INFO("UI_MGR", "DisplayManager associé est prêt. UIManager peut continuer son initialisation.");
+    } else {
+        LOG_ERROR("UI_MGR", "DisplayManager associé n'est PAS prêt. UIManager ne peut pas s'initialiser correctement.");
+        return false; // Ne pas continuer si l'écran n'est pas prêt
     }
     
     // Configurer les entrées pour les boutons (utiliser INPUT_PULLUP pour éviter les résistances externes)
@@ -100,46 +101,38 @@ bool UIManager::begin() {
         lastDebounceTime[i] = 0;
     }
     
-    if (lcdInitialized) {
-        // Afficher un écran de bienvenue initial
-        display.displayWelcomeScreen(true);
-        delay(1000);  // Court délai pour afficher l'écran d'accueil
-        updateDisplay();  // Afficher l'écran principal
-        LOG_INFO("UI", "Interface utilisateur initialisée avec succès");
+    if (this->lcdInitialized) {
+        // Afficher un écran de bienvenue initial via le DisplayManager associé
+        this->associatedDisplay->displayWelcomeScreen(true);
+        if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        } else {
+            delay(1000); // Fallback
+        }
+        updateDisplay();  // Appeler UIManager::updateDisplay() pour afficher l'écran principal
+        LOG_INFO("UI", "Interface utilisateur initialisée avec succès (basée sur le DisplayManager associé).");
     } else {
-        LOG_ERROR("UI", "Échec d'initialisation de l'interface utilisateur - écran LCD non fonctionnel");
+        LOG_ERROR("UI", "Échec d'initialisation de l'interface utilisateur - DisplayManager associé non fonctionnel.");
     }
     
-    return lcdInitialized;
-}
-
-void UIManager::createCustomChars() {
-    if (!lcdInitialized) return;
-    
-    lcd.createChar(0, const_cast<uint8_t*>(charDirection));
-    lcd.createChar(1, const_cast<uint8_t*>(charLeft));
-    lcd.createChar(2, const_cast<uint8_t*>(charRight));
-    lcd.createChar(3, const_cast<uint8_t*>(charBlock));
+    return this->lcdInitialized;
 }
 
 void UIManager::clear() {
-    if (!lcdInitialized) return;
-    lcd.clear();
+    if (!this->lcdInitialized || !this->associatedDisplay) return;
+    this->associatedDisplay->clear(); 
 }
 
 void UIManager::centerText(uint8_t row, const char* text) {
-    if (!lcdInitialized || row >= LCD_ROWS) return;
-    
-    int textLength = strlen(text);
-    int position = (LCD_COLS - textLength) / 2;
-    position = max(0, position);
-    
-    lcd.setCursor(position, row);
-    lcd.print(text);
+    if (!this->lcdInitialized || !this->associatedDisplay || row >= LCD_ROWS) return;
+    this->associatedDisplay->centerText(row, text); 
+    this->associatedDisplay->updateLCDDiff(); 
 }
 
 void UIManager::updateDisplay() {
-    if (!lcdInitialized) return;
+    if (!this->associatedDisplay || !this->associatedDisplay->isSuccessfullyInitialized()) {
+        return;
+    }
     
     unsigned long currentTime = millis();
     if (!displayNeedsUpdate && (currentTime - lastDisplayUpdate < DISPLAY_UPDATE_INTERVAL)) {
@@ -172,515 +165,276 @@ void UIManager::updateDisplay() {
     }
 }
 
+void UIManager::displayMessage(const char* title, const char* message) {
+    if (!this->lcdInitialized || !this->associatedDisplay) return;
+    this->associatedDisplay->displayMessage(title, message, 0); // Utilise le DisplayManager associé
+    this->associatedDisplay->updateLCDDiff(); // S'assurer que le message est affiché
+}
+
+void UIManager::displayWiFiInfo(const String& ssid, const IPAddress& ip) {
+    if (!this->lcdInitialized || !this->associatedDisplay) return;
+    this->associatedDisplay->displayWiFiInfo(ssid.c_str(), ip); // Utilise le DisplayManager associé
+    this->associatedDisplay->updateLCDDiff();
+}
+
+void UIManager::displaySystemStats() {
+    if (!this->lcdInitialized || !this->associatedDisplay) return;
+    this->associatedDisplay->clear(); // Effacer l'écran via le DisplayManager associé
+    
+    char buffer[LCD_COLS + 1];
+    this->associatedDisplay->centerText(0, "System Stats");
+
+    // Exemple: Afficher l'uptime (à adapter avec les vraies données)
+    unsigned long uptime_s = millis() / 1000;
+    snprintf(buffer, sizeof(buffer), "Uptime: %lus", uptime_s);
+    this->associatedDisplay->centerText(1, buffer);
+
+    // Exemple: Afficher la mémoire libre (à adapter)
+    // snprintf(buffer, sizeof(buffer), "Free Mem: %u", ESP.getFreeHeap());
+    // this->associatedDisplay->centerText(2, buffer);
+    
+    this->associatedDisplay->updateLCDDiff(); // Mettre à jour l'écran physique
+}
+
 void UIManager::checkButtons() {
     unsigned long currentTime = millis();
-    if (currentTime - lastButtonCheck < BUTTON_CHECK_INTERVAL) {
+    
+    const unsigned long currentButtonCheckInterval = BUTTON_CHECK_INTERVAL; 
+    const unsigned long currentButtonDebounceDelay = BUTTON_DEBOUNCE_DELAY; 
+
+    if (currentTime - lastButtonCheck < currentButtonCheckInterval) {
         return;
     }
     lastButtonCheck = currentTime;
     
-    // Lecture des boutons avec anti-rebond
-    uint8_t pins[4] = {BUTTON_BACK_PIN, BUTTON_UP_PIN, BUTTON_SELECT_PIN, BUTTON_DOWN_PIN};
+    uint8_t pins[MAX_BUTTONS] = {BUTTON_BACK_PIN, BUTTON_UP_PIN, BUTTON_SELECT_PIN, BUTTON_DOWN_PIN}; 
     
-    for (int i = 0; i < 4; i++) {
-        bool reading = !digitalRead(pins[i]); // Inversé car INPUT_PULLUP
+    for (int i = 0; i < MAX_BUTTONS; i++) {
+        bool reading = !digitalRead(pins[i]); 
         
         if (reading != lastButtonStates[i]) {
             lastDebounceTime[i] = currentTime;
         }
         
-        if ((currentTime - lastDebounceTime[i]) > BUTTON_DEBOUNCE_DELAY) {
-            if (reading != buttonStates[i]) {
+        if ((currentTime - lastDebounceTime[i]) > currentButtonDebounceDelay) {
+            if (reading != buttonStates[i]) { 
                 buttonStates[i] = reading;
-                if (reading) {
-                    // Action sur pression du bouton
-                    switch (i) {
-                        case 0: // BLUE
+                if (buttonStates[i]) { 
+                    LOG_DEBUG("UI_MGR", "Bouton %d pressé (Pin: %d)", i, pins[i]);
+                    switch (i) { 
+                        case 0: 
                             menuBack();
                             break;
-                        case 1: // GREEN
+                        case 1: 
                             menuUp();
                             break;
-                        case 2: // RED
+                        case 2: 
                             menuSelect();
                             break;
-                        case 3: // YELLOW
+                        case 3: 
                             menuDown();
                             break;
                     }
+                    displayNeedsUpdate = true; 
                 }
             }
         }
-        
-        lastButtonStates[i] = reading;
+        lastButtonStates[i] = reading; 
     }
 }
 
-bool UIManager::isButtonPressed(uint8_t buttonId) {
-    if (buttonId >= 4) return false;
-    return buttonStates[buttonId];
+void UIManager::menuUp() {
+    LOG_DEBUG("UI_MGR", "menuUp() appelé");
+    if (currentMenuSelection > 0) {
+        currentMenuSelection--;
+    }
+    displayNeedsUpdate = true;
+    showMenu(currentMenu); 
+}
+
+void UIManager::menuDown() {
+    LOG_DEBUG("UI_MGR", "menuDown() appelé");
+    uint8_t itemCount = 3; 
+    if (currentMenu == MENU_MAIN) itemCount = 3; 
+
+    if (currentMenuSelection < itemCount) { 
+        currentMenuSelection++;
+    }
+    displayNeedsUpdate = true;
+    showMenu(currentMenu); 
+}
+
+void UIManager::menuSelect() {
+    LOG_DEBUG("UI_MGR", "menuSelect() appelé - Menu: %d, Sélection: %d", currentMenu, currentMenuSelection);
+    displayNeedsUpdate = true;
+}
+
+void UIManager::menuBack() {
+    LOG_DEBUG("UI_MGR", "menuBack() appelé");
+    if (currentMenu != MENU_MAIN) { 
+        showMenu(MENU_MAIN); 
+    }
+    displayNeedsUpdate = true;
 }
 
 void UIManager::updateMainDisplay() {
-    clear();
-    centerText(0, "Kite PiloteV3");
-    
-    // Statut WiFi
-    lcd.setCursor(0, 1);
-    if (WiFi.status() == WL_CONNECTED) {
-        lcd.print("WiFi: ");
-        lcd.print(WiFi.SSID());
-    } else {
-        lcd.print("WiFi: Déconnecté");
+    if (this->associatedDisplay) {
+        this->associatedDisplay->updateMainDisplay();
     }
-    
-    // Message système
-    lcd.setCursor(0, 2);
-    lcd.print("Appuyez pour menu");
-    
-    // Uptime
-    lcd.setCursor(0, 3);
-    lcd.print("Uptime: ");
-    unsigned long uptime = millis() / 1000;
-    lcd.print(uptime);
-    lcd.print("s");
 }
 
 void UIManager::updateDirectionTrimDisplay(int direction, int trim) {
-    clear();
-    centerText(0, "Contrôle Direction");
+    this->associatedDisplay->clear();
+    this->associatedDisplay->centerText(0, "Contrôle Direction");
     
-    // Direction
-    lcd.setCursor(0, 1);
-    lcd.print("Dir:");
+    this->associatedDisplay->getLcd().setCursor(0, 1);
+    this->associatedDisplay->getLcd().print("Dir:");
     drawDirection(1, direction);
-    lcd.setCursor(16, 1);
-    if (direction >= 0) lcd.print(" ");
-    lcd.print(direction);
+    this->associatedDisplay->getLcd().setCursor(16, 1);
+    if (direction >= 0) this->associatedDisplay->getLcd().print(" ");
+    this->associatedDisplay->getLcd().print(direction);
     
-    // Trim
-    lcd.setCursor(0, 2);
-    lcd.print("Trim:");
+    this->associatedDisplay->getLcd().setCursor(0, 2);
+    this->associatedDisplay->getLcd().print("Trim:");
     drawDirection(2, trim);
-    lcd.setCursor(16, 2);
-    if (trim >= 0) lcd.print(" ");
-    lcd.print(trim);
+    this->associatedDisplay->getLcd().setCursor(16, 2);
+    if (trim >= 0) this->associatedDisplay->getLcd().print(" ");
+    this->associatedDisplay->getLcd().print(trim);
     
-    // Aide
-    lcd.setCursor(0, 3);
-    lcd.print("POT1:Dir POT2:Trim");
+    this->associatedDisplay->getLcd().setCursor(0, 3);
+    this->associatedDisplay->getLcd().print("POT1:Dir POT2:Trim");
 }
 
 void UIManager::updateLineLengthDisplay(int length) {
-    clear();
-    centerText(0, "Longueur Lignes");
-    
-    lcd.setCursor(0, 1);
-    lcd.print("Longueur: ");
-    lcd.print(length);
-    lcd.print("%");
+    this->associatedDisplay->clear();
+    this->associatedDisplay->centerText(0, "Longueur Lignes");
+        
+    this->associatedDisplay->getLcd().setCursor(0, 1);
+    this->associatedDisplay->getLcd().print("Longueur: ");
+    this->associatedDisplay->getLcd().print(length);
+    this->associatedDisplay->getLcd().print("%");
     
     drawProgressBar(2, length);
     
-    lcd.setCursor(0, 3);
-    lcd.print("POT3: Longueur");
-}
-
-void UIManager::displayMessage(const char* title, const char* message) {
-    if (!lcdInitialized) {
-        LOG_INFO("UI", "%s: %s", title, message);
-        return;
-    }
-    
-    clear();
-    centerText(0, title);
-    
-    // Affichage du message sur plusieurs lignes si nécessaire
-    int msgLen = strlen(message);
-    int startIdx = 0;
-    
-    for (int row = 1; row < LCD_ROWS && startIdx < msgLen; row++) {
-        int endIdx = startIdx;
-        int lastSpaceIdx = -1;
-        
-        while (endIdx < msgLen && endIdx < startIdx + LCD_COLS) {
-            if (message[endIdx] == ' ') {
-                lastSpaceIdx = endIdx;
-            }
-            endIdx++;
-        }
-        
-        int cutIdx = (lastSpaceIdx != -1 && endIdx < msgLen) ? lastSpaceIdx : endIdx;
-        
-        lcd.setCursor(0, row);
-        for (int i = startIdx; i < cutIdx; i++) {
-            lcd.print(message[i]);
-        }
-        
-        startIdx = (lastSpaceIdx != -1 && endIdx < msgLen) ? lastSpaceIdx + 1 : endIdx;
-    }
-}
-
-void UIManager::displayWiFiInfo(const String& ssid, const IPAddress& ip) {
-    clear();
-    centerText(0, "Info WiFi");
-    
-    // SSID
-    lcd.setCursor(0, 1);
-    lcd.print("SSID: ");
-    if (ssid.length() > LCD_COLS - 6) {
-        lcd.print(ssid.substring(0, LCD_COLS - 9));
-        lcd.print("...");
-    } else {
-        lcd.print(ssid);
-    }
-    
-    // IP
-    lcd.setCursor(0, 2);
-    lcd.print("IP: ");
-    char ipBuffer[16];
-    snprintf(ipBuffer, sizeof(ipBuffer), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    lcd.print(ipBuffer);
-    
-    // État
-    lcd.setCursor(0, 3);
-    if (WiFi.status() == WL_CONNECTED) {
-        char rssiBuffer[16];
-        snprintf(rssiBuffer, sizeof(rssiBuffer), "Signal: %d dBm", WiFi.RSSI());
-        lcd.print(rssiBuffer);
-    } else {
-        lcd.print("Déconnecté");
-    }
-}
-
-void UIManager::displaySystemStats() {
-    clear();
-    centerText(0, "Système");
-    
-    // Mémoire
-    uint32_t freeHeap = ESP.getFreeHeap();
-    uint32_t totalHeap = ESP.getHeapSize();
-    uint8_t heapPercent = (freeHeap * 100) / totalHeap;
-    
-    lcd.setCursor(0, 1);
-    lcd.print("Mém: ");
-    lcd.print(freeHeap / 1024);
-    lcd.print("/");
-    lcd.print(totalHeap / 1024);
-    lcd.print("KB");
-    
-    // CPU
-    lcd.setCursor(0, 2);
-    lcd.print("CPU: ");
-    lcd.print(ESP.getCpuFreqMHz());
-    lcd.print("MHz ");
-    
-    // Uptime
-    lcd.setCursor(0, 3);
-    lcd.print("Uptime: ");
-    unsigned long uptime = millis() / 1000;
-    lcd.print(uptime);
-    lcd.print("s");
+    this->associatedDisplay->getLcd().setCursor(0, 3);
+    this->associatedDisplay->getLcd().print("POT3: Longueur");
 }
 
 void UIManager::drawProgressBar(uint8_t row, uint8_t percent) {
-    if (!lcdInitialized || row >= LCD_ROWS) return;
+    if (!this->lcdInitialized || row >= LCD_ROWS) return;
     
     percent = constrain(percent, 0, 100);
     int numBlocks = (percent * LCD_COLS) / 100;
     
-    lcd.setCursor(0, row);
+    this->associatedDisplay->getLcd().setCursor(0, row);
     
     for (int i = 0; i < numBlocks; i++) {
-        lcd.write(byte(3)); // Bloc plein
+        this->associatedDisplay->getLcd().write(byte(2)); 
     }
     
     for (int i = numBlocks; i < LCD_COLS; i++) {
-        lcd.print(" ");
+        this->associatedDisplay->getLcd().print(" ");
     }
 }
 
 void UIManager::drawDirection(uint8_t row, int value) {
-    if (!lcdInitialized || row >= LCD_ROWS) return;
+    if (!this->lcdInitialized || row >= LCD_ROWS) return;
     
     value = constrain(value, -100, 100);
-    int center = 10;
-    int position = center + (value * (center - 1)) / 100;
-    position = constrain(position, 1, 19);
+    int center = LCD_COLS / 2; 
+    int mappedVal = map(value, -100, 100, -(center-1), (center-1) );
+    int position = center + mappedVal;
+
+    position = constrain(position, 0, LCD_COLS - 1); 
     
-    lcd.setCursor(0, row);
+    this->associatedDisplay->getLcd().setCursor(0, row);
     
     for (int i = 0; i < LCD_COLS; i++) {
         if (i == position) {
-            lcd.write(byte(0)); // Flèche de direction
+            this->associatedDisplay->getLcd().write(byte(0)); 
         } else if (i == center) {
-            lcd.print("|");
+            this->associatedDisplay->getLcd().print("|");
         } else {
-            lcd.print(".");
+            this->associatedDisplay->getLcd().print(".");
         }
     }
 }
 
 void UIManager::showMenu(MenuState menu) {
-    if (!lcdInitialized) return;
+    if (!this->lcdInitialized || !this->associatedDisplay) return; 
     currentMenu = menu;
     currentMenuSelection = 0;
-    clear();
+    this->associatedDisplay->clear();
+
     switch (menu) {
         case MENU_MAIN:
-            centerText(0, "Menu Principal");
+            this->associatedDisplay->centerText(0, "Menu Principal");
             printMenuItem(1, "Contrôle", currentMenuSelection == 0);
             printMenuItem(2, "Paramètres", currentMenuSelection == 1);
             printMenuItem(3, "Système", currentMenuSelection == 2);
-            printMenuItem(4, "Modules", currentMenuSelection == 3);
             break;
             
         case MENU_SETTINGS:
-            centerText(0, "Paramètres");
+            this->associatedDisplay->centerText(0, "Paramètres");
             printMenuItem(1, "Calibration", currentMenuSelection == 0);
             printMenuItem(2, "WiFi", currentMenuSelection == 1);
             printMenuItem(3, "Retour", currentMenuSelection == 2);
             break;
             
         case MENU_CONTROL:
-            centerText(0, "Contrôle");
+            this->associatedDisplay->centerText(0, "Contrôle");
             printMenuItem(1, "Mode Direction", currentMenuSelection == 0);
             printMenuItem(2, "Mode Longueur", currentMenuSelection == 1);
             printMenuItem(3, "Retour", currentMenuSelection == 2);
             break;
             
         case MENU_WIFI:
-            centerText(0, "WiFi");
+            this->associatedDisplay->centerText(0, "WiFi");
             printMenuItem(1, "Connexion", currentMenuSelection == 0);
             printMenuItem(2, "Info", currentMenuSelection == 1);
             printMenuItem(3, "Retour", currentMenuSelection == 2);
             break;
             
         case MENU_SYSTEM:
-            centerText(0, "Système");
+            this->associatedDisplay->centerText(0, "Système");
             printMenuItem(1, "Info", currentMenuSelection == 0);
             printMenuItem(2, "Mise à jour OTA", currentMenuSelection == 1);
             printMenuItem(3, "Retour", currentMenuSelection == 2);
             break;
 
         case MENU_MODULES: {
-            centerText(0, "Modules actifs");
+            this->associatedDisplay->centerText(0, "Modules actifs");
             int row = 1;
             int idx = 0;
             for (Module* m : ModuleRegistry::instance().modules()) {
-                char line[21];
+                if (row >= LCD_ROWS) break; 
+                char line[LCD_COLS +1]; 
                 snprintf(line, sizeof(line), "%c%s [%s]", (currentMenuSelection == idx ? '>' : ' '), m->name(), m->isEnabled() ? "ON" : "OFF");
-                centerText(row, line);
+                printMenuItem(row, line, currentMenuSelection == idx); 
                 row++;
                 idx++;
-                if (row >= LCD_ROWS) break;
             }
-            for (; row < LCD_ROWS; ++row) centerText(row, "");
+            for (; row < LCD_ROWS; ++row) {
+                 this->associatedDisplay->getLcd().setCursor(0, row);
+                 for(int i=0; i<LCD_COLS; ++i) this->associatedDisplay->getLcd().print(" ");
+            }
             break;
         }
     }
+    this->associatedDisplay->updateLCDDiff(); 
 }
 
 void UIManager::printMenuItem(uint8_t row, const char* text, bool selected) {
-    if (!lcdInitialized || row >= LCD_ROWS) return;
-    
-    lcd.setCursor(0, row);
-    lcd.print(selected ? ">" : " ");
-    lcd.print(text);
-    
-    // Effacer le reste de la ligne
-    for (int i = strlen(text) + 1; i < LCD_COLS; i++) {
-        lcd.print(" ");
-    }
-}
+    if (!this->lcdInitialized || row >= LCD_ROWS) return;
 
-void UIManager::menuUp() {
-    if (!lcdInitialized) return;
+    char buffer[LCD_COLS + 1];
+    snprintf(buffer, sizeof(buffer), "%c %s", (selected ? '>' : ' '), text);
     
-    if (currentMenu == MENU_MODULES && currentMenuSelection > 0) {
-        currentMenuSelection--;
-        showMenu(currentMenu);
-        return;
+    for (size_t i = strlen(buffer); i < LCD_COLS; ++i) {
+        buffer[i] = ' ';
     }
+    buffer[LCD_COLS] = '\0';
 
-    if (currentMenuSelection > 0) {
-        currentMenuSelection--;
-        showMenu(currentMenu);
-    }
-}
-
-void UIManager::menuDown() {
-    if (!lcdInitialized) return;
-    
-    if (currentMenu == MENU_MODULES) {
-        int moduleCount = ModuleRegistry::instance().modules().size();
-        if (currentMenuSelection < moduleCount - 1) {
-            currentMenuSelection++;
-            showMenu(currentMenu);
-        }
-        return;
-    }
-
-    const uint8_t menuItemCounts[] = {4, 3, 3, 3, 3};
-    
-    if (currentMenuSelection < menuItemCounts[currentMenu] - 1) {
-        currentMenuSelection++;
-        showMenu(currentMenu);
-    }
-}
-
-void UIManager::menuSelect() {
-    if (!lcdInitialized) return;
-    
-    if (currentMenu == MENU_MODULES) {
-        int idx = 0;
-        for (Module* m : ModuleRegistry::instance().modules()) {
-            if (idx == currentMenuSelection) {
-                if (m->isEnabled()) m->disable();
-                else m->enable();
-                break;
-            }
-            idx++;
-        }
-        showMenu(MENU_MODULES);
-        return;
-    }
-
-    switch (currentMenu) {
-        case MENU_MAIN:
-            switch (currentMenuSelection) {
-                case 0:
-                    showMenu(MENU_CONTROL);
-                    break;
-                case 1:
-                    showMenu(MENU_SETTINGS);
-                    break;
-                case 2:
-                    showMenu(MENU_SYSTEM);
-                    break;
-                case 3:
-                    showMenu(MENU_MODULES);
-                    break;
-            }
-            break;
-            
-        case MENU_SETTINGS:
-            switch (currentMenuSelection) {
-                case 0:
-                    displayMessage("Calibration", "Mode calibration\nDéplacez les pots");
-                    break;
-                case 1:
-                    showMenu(MENU_WIFI);
-                    break;
-                case 2:
-                    showMenu(MENU_MAIN);
-                    break;
-            }
-            break;
-            
-        case MENU_CONTROL:
-            switch (currentMenuSelection) {
-                case 0:
-                    currentDisplayState = DISPLAY_DIRECTION_TRIM;
-                    updateDisplay();
-                    break;
-                case 1:
-                    currentDisplayState = DISPLAY_LINE_LENGTH;
-                    updateDisplay();
-                    break;
-                case 2:
-                    showMenu(MENU_MAIN);
-                    break;
-            }
-            break;
-            
-        case MENU_WIFI:
-            switch (currentMenuSelection) {
-                case 0:
-                    displayMessage("WiFi", "Connexion en cours...");
-                    break;
-                case 1:
-                    currentDisplayState = DISPLAY_WIFI_INFO;
-                    updateDisplay();
-                    break;
-                case 2:
-                    showMenu(MENU_SETTINGS);
-                    break;
-            }
-            break;
-            
-        case MENU_SYSTEM:
-            switch (currentMenuSelection) {
-                case 0:
-                    currentDisplayState = DISPLAY_SYSTEM_STATS;
-                    updateDisplay();
-                    break;
-                case 1:
-                    displayMessage("OTA", "Préparation OTA...");
-                    break;
-                case 2:
-                    showMenu(MENU_MAIN);
-                    break;
-            }
-            break;
-    }
-}
-
-void UIManager::menuBack() {
-    if (!lcdInitialized) return;
-    
-    switch (currentMenu) {
-        case MENU_MAIN:
-            currentDisplayState = DISPLAY_MAIN;
-            updateDisplay();
-            break;
-            
-        case MENU_SETTINGS:
-        case MENU_CONTROL:
-        case MENU_SYSTEM:
-        case MENU_MODULES:
-            showMenu(MENU_MAIN);
-            break;
-            
-        case MENU_WIFI:
-            showMenu(MENU_SETTINGS);
-            break;
-    }
-}
-
-void UIManager::checkDisplayStatus() {
-    unsigned long currentTime = millis();
-    
-    if (currentTime - lastDisplayCheck < DISPLAY_CHECK_INTERVAL) {
-        return;
-    }
-    
-    lastDisplayCheck = currentTime;
-    
-    // Vérifier d'abord si l'écran LCD répond via DisplayManager
-    if (!display.isInitialized()) {
-        LOG_WARNING("UI", "Écran LCD non initialisé, tentative de récupération");
-        display.checkAndRecover();
-        
-        // Mettre à jour l'état d'initialisation de l'UIManager
-        lcdInitialized = display.isInitialized();
-        
-        // Si l'écran est maintenant fonctionnel, forcer une mise à jour de l'affichage
-        if (lcdInitialized) {
-            displayNeedsUpdate = true;
-            LOG_INFO("UI", "Écran LCD récupéré avec succès");
-        }
-    } else {
-        // Même si l'écran est initialisé, vérifier périodiquement sa connexion
-        bool lcdOk = display.checkLCDConnection();
-        if (!lcdOk) {
-            // L'écran ne répond plus, tenter une récupération
-            LOG_WARNING("UI", "Écran LCD ne répond plus, tentative de récupération");
-            display.recoverLCD();
-            lcdInitialized = display.isInitialized();
-            if (lcdInitialized) {
-                displayNeedsUpdate = true;
-            }
-        }
-    }
+    this->associatedDisplay->getLcd().setCursor(0, row);
+    this->associatedDisplay->getLcd().print(buffer);
 }

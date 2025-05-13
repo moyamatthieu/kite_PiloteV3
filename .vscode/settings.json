@@ -2,6 +2,10 @@
     "cline.preferredLanguage": "French - Français",
     "liveServer.settings.port": 5501,
     "files.associations": {
-        "cmath": "cpp"
+        "cmath": "cpp",
+        "chrono": "cpp",
+        "random": "cpp",
+        "limits": "cpp",
+        "thread": "cpp"
     }
 }

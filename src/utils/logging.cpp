@@ -65,9 +65,18 @@ static const char* logColorReset = "\033[0m"; // Renommé pour éviter les confl
 LoggingModule::LoggingModule() : 
     _initialized(false),
     _startTime(0),
+    _logMessageId(0), // Initialisation de _logMessageId
     _historyIndex(0),
     _historyFilled(false) {
     
+    // Création du Mutex pour la journalisation
+    _logMutex = xSemaphoreCreateMutex();
+    if (_logMutex == NULL) {
+        // Gérer l'erreur de création du mutex, peut-être logger sur Serial directement
+        // si Serial est déjà initialisé, ou marquer un état d'erreur.
+        // Pour l'instant, on ne fait rien de spécial, mais c'est important en production.
+    }
+
     // Allocation des buffers
     _logBuffer = new char[LOG_BUFFER_SIZE];
     _freeHeapHistory = new uint32_t[MEM_HISTORY_SIZE];
@@ -101,6 +110,12 @@ LoggingModule::~LoggingModule() {
     if (_minFreeHeapHistory) {
         delete[] _minFreeHeapHistory;
         _minFreeHeapHistory = nullptr;
+    }
+
+    // Suppression du mutex
+    if (_logMutex != NULL) {
+        vSemaphoreDelete(_logMutex);
+        _logMutex = NULL;
     }
 }
 
@@ -168,12 +183,33 @@ const char* LoggingModule::levelToString(LogLevel level) const {
 
 // Affichage d'un message de journalisation
 void LoggingModule::print(LogLevel level, const char* tag, const char* format, ...) {
-    if (level > currentLogLevel || level == LOG_LEVEL_NONE) {
+    if (level > currentLogLevel || level == LOG_LEVEL_NONE || !_initialized) {
         return;
     }
-    
+
+    if (_logMutex != NULL) {
+        if (xSemaphoreTake(_logMutex, portMAX_DELAY) == pdTRUE) {
+            va_list args;
+            va_start(args, format);
+            vprint(level, tag, format, args); // Appel à la nouvelle méthode vprint
+            va_end(args);
+            xSemaphoreGive(_logMutex);
+        }
+    } else {
+        // Fallback si le mutex n'a pas été créé (ne devrait pas arriver si bien initialisé)
+        va_list args;
+        va_start(args, format);
+        vprint(level, tag, format, args);
+        va_end(args);
+    }
+}
+
+// Nouvelle méthode privée pour le formatage et l'impression réels
+void LoggingModule::vprint(LogLevel level, const char* tag, const char* format, va_list args) {
+    _logMessageId++; // Incrémentation de l'ID du message
+
     // Récupérer le nom de la tâche en cours
-    char taskName[16] = "main"; // Par défaut, nous supposons que c'est la tâche principale
+    char taskName[configMAX_TASK_NAME_LEN] = "main"; // Utilisation de configMAX_TASK_NAME_LEN
     if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
         TaskHandle_t currentTask = xTaskGetCurrentTaskHandle();
         if (currentTask != NULL) {
@@ -189,57 +225,48 @@ void LoggingModule::print(LogLevel level, const char* tag, const char* format, .
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - _startTime;
     size_t headerLength = snprintf(_logBuffer, LOG_BUFFER_SIZE, 
-                   "[%lu.%03u] %s %s [%s]: ",
+                   "[ID:%lu][%lu.%03u] %s %s [%s]: ", // Ajout de l'ID du message
+                   _logMessageId, // Utilisation de l'ID du message
                    elapsedTime / 1000, elapsedTime % 1000,
                    _levelNames[level], tag, taskName);
     
-    if (headerLength >= LOG_BUFFER_SIZE - 1) {
-        Serial.println("BUFFER OVERFLOW");
-        return;
+    if (headerLength >= LOG_BUFFER_SIZE - 1) { // Vérification si le buffer est plein après l'en-tête
+        Serial.println("[LOG_ERR] Buffer overflow in header (optimized)");
+        return; // Éviter d'écrire plus loin
     }
     
-    va_list args;
-    va_start(args, format);
+    // Formatage du message utilisateur dans la partie restante du buffer
     vsnprintf(_logBuffer + headerLength, LOG_BUFFER_SIZE - headerLength, format, args);
-    va_end(args);
+    Serial.println(_logBuffer); // Imprimer le buffer complet
     
-    Serial.println(_logBuffer);
-    
-#else
+#else // Mode non optimisé (avec couleurs)
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - _startTime;
     unsigned long seconds = elapsedTime / 1000;
     unsigned int milliseconds = elapsedTime % 1000;
     
     size_t headerLength = snprintf(_logBuffer, LOG_BUFFER_SIZE, 
-                       "%s[%6lu.%03u] %7s %-10s [%-8s]%s: ",
+                       "%s[ID:%lu][%6lu.%03u] %7s %-10s [%-*s]%s: ", // Utilisation de configMAX_TASK_NAME_LEN pour taskName
                        _colors[level],
+                       _logMessageId, 
                        seconds, milliseconds,
                        _levelNames[level],
                        tag,
+                       configMAX_TASK_NAME_LEN -1, // Largeur pour le nom de la tâche
                        taskName,
-                       logColorReset);
+                       _colorReset); // Renommé en _colorReset dans le constructeur
     
-    if (headerLength >= LOG_BUFFER_SIZE - 1) {
-        Serial.println("LOG BUFFER OVERFLOW DANS L'EN-TÊTE");
-        return;
+    if (headerLength >= LOG_BUFFER_SIZE - 1) { // Vérification si le buffer est plein après l'en-tête
+        Serial.printf("%s[LOG_ERR] Buffer overflow in header (colored)%s\n", _colors[LOG_LEVEL_ERROR], _colorReset);
+        return; // Éviter d'écrire plus loin
     }
     
-    va_list args;
-    va_start(args, format);
-    size_t messageLength = vsnprintf(_logBuffer + headerLength, 
-                                    LOG_BUFFER_SIZE - headerLength - 1, 
-                                    format, args);
-    va_end(args);
-    
-    if (messageLength >= LOG_BUFFER_SIZE - headerLength - 1) {
-        const char truncated[] = " [...]";
-        strncpy(_logBuffer + LOG_BUFFER_SIZE - strlen(truncated) - 1, 
-                truncated, 
-                strlen(truncated));
+    size_t remainingBuffer = LOG_BUFFER_SIZE - headerLength;
+    if (remainingBuffer > 1) { // Au moins 1 caractère + null
+        vsnprintf(_logBuffer + headerLength, remainingBuffer, format, args);
     }
     
-    Serial.println(_logBuffer);
+    Serial.println(_logBuffer); // Imprimer le buffer complet
 #endif
 }
 
@@ -363,29 +390,22 @@ void logSetLevel(LogLevel level) {
 
 // Affichage d'un message de journalisation
 void logPrint(LogLevel level, const char* tag, const char* format, ...) {
-    // Vérification du niveau de log avant de continuer
     if (level > currentLogLevel || level == LOG_LEVEL_NONE) {
         return;
     }
     
-    // Obtention de l'instance du module de journalisation
     LoggingModule* logger = LoggingModule::getInstance();
-    
-    // Préparation des arguments variables
+    if (!logger || !logger->isInitialized()) {
+        return;
+    }
+
     va_list args;
     va_start(args, format);
-    
-    // Buffer temporaire pour formater le message
-    static char tempBuffer[LOG_BUFFER_SIZE];
-    
-    // Formatage du message
-    vsnprintf(tempBuffer, LOG_BUFFER_SIZE, format, args);
-    
-    // Appel de la méthode de la classe
-    logger->print(level, tag, "%s", tempBuffer);
-    
-    // Nettoyage
+    char tempFormatBuffer[LOG_BUFFER_SIZE];
+    vsnprintf(tempFormatBuffer, sizeof(tempFormatBuffer), format, args);
     va_end(args);
+    
+    logger->print(level, tag, "%s", tempFormatBuffer); 
 }
 
 // Conversion d'un niveau de journalisation en chaîne

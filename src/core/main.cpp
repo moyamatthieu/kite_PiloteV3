@@ -39,6 +39,7 @@
 #include <ElegantOTA.h>          // Module de mise à jour OTA (Over The Air)
 #include <ESP32Servo.h>          // Bibliothèque pour les servomoteurs
 #include <FastAccelStepper.h>    // Bibliothèque pour le moteur pas à pas
+#include <Wire.h>                // Gestion du bus I2C
 
 // === INCLUSIONS DES MODULES CENTRAUX DU PROJET ===
 #include "utils/logging.h"       // Fonctions et macros de journalisation
@@ -76,16 +77,16 @@
 
 // === INCLUSIONS MODULES UTILS ===
 #include "utils/data_storage.h"           // Gestion du stockage des données
-#include "utils/diagnostics.h"            // Diagnostics système
+#include "utils/diagnostics.h"            // Diagnostics système et scanI2CBus
 #include "utils/terminal.h"               // Terminal distant
 
 // === DÉCLARATION DES OBJETS GLOBAUX ===
-DisplayManager display;                       // Gestionnaire d'affichage LCD
-ButtonUIManager buttonUI(&display);           // Gestionnaire de l'interface utilisateur à boutons
-PotentiometerManager potManager;              // Gestionnaire des potentiomètres
+DisplayManager display_global;                       // Gestionnaire d'affichage LCD GLOBAL
+ButtonUIManager buttonUI(&display_global);           // Gestionnaire de l'interface utilisateur à boutons - Initialisé avec display_global
+PotentiometerManager potManager;              // Gestionnaire des potentiomètres - Sera initialisé dans InitTask
 AsyncWebServer server(SERVER_PORT);           // Serveur web asynchrone
 TaskManager taskManager;                      // Gestionnaire de tâches multiples
-UIManager uiManager;                          // Gestionnaire de l'interface utilisateur
+UIManager uiManager(&display_global);         // Gestionnaire de l'interface utilisateur - PREND MAINTENANT LE DISPLAY GLOBAL
 WiFiManager wifiManager;                      // Gestionnaire WiFi
 
 // Variables d'état système
@@ -127,12 +128,14 @@ void feedWatchdogs();
  * Initialise et connecte le WiFi avec timeout et gestion optimisée
  */
 void setupWiFi() {
-  if (!display.isInitialized()) {
-    return;
+  if (!display_global.isSuccessfullyInitialized()) {
+    LOG_WARNING("WIFI", "Écran LCD non initialisé, affichage WiFi sauté pour certains messages.");
   }
   
   LOG_INFO("WIFI", "Connexion au réseau %s...", WIFI_SSID);
-  display.displayMessage("Système", "Connexion WiFi...");
+  if (display_global.isSuccessfullyInitialized()) {
+    display_global.displayMessage("Système", "Connexion WiFi...");
+  }
   
   // Configuration du mode WiFi en mode station
   WiFi.mode(WIFI_STA);
@@ -163,13 +166,16 @@ void setupWiFi() {
     LOG_INFO("WIFI", "Connecté à %s, IP: %d.%d.%d.%d", 
              WIFI_SSID, ip[0], ip[1], ip[2], ip[3]);
     
-    // Afficher les informations de connexion
-    display.displayWiFiInfo(WIFI_SSID, WiFi.localIP());
-    delay(1000); // Afficher pendant 1 seconde
+    if (display_global.isSuccessfullyInitialized()) {
+      display_global.displayWiFiInfo(WIFI_SSID, WiFi.localIP());
+      delay(1000); // Afficher pendant 1 seconde
+    }
   } else {
     LOG_ERROR("WIFI", "Échec de connexion au réseau %s", WIFI_SSID);
-    display.displayMessage("Erreur", "Échec WiFi");
-    delay(1000);
+    if (display_global.isSuccessfullyInitialized()) {
+      display_global.displayMessage("Erreur", "Échec WiFi");
+      delay(1000);
+    }
   }
 }
 
@@ -183,7 +189,9 @@ void setupServer() {
     return;
   }
   
-  display.displayMessage("Système", "Démarrage serveur...");
+  if (display_global.isSuccessfullyInitialized()) {
+    display_global.displayMessage("Système", "Démarrage serveur...");
+  }
   
   // Définition du mode de fonctionnement du serveur web
   setWebServerMode(false);
@@ -207,15 +215,16 @@ void setupServer() {
   // Afficher l'adresse IP pour accéder à l'interface web
   LOG_INFO("SERVER", "IP: %s", WiFi.localIP().toString().c_str());
   
-  // Affichage final
-  display.displayMessage("Système", "Prêt!");
-  delay(1000);
+  if (display_global.isSuccessfullyInitialized()) {
+    display_global.displayMessage("Système", "Prêt!");
+    delay(1000);
   
-  char otaUrl[40];
-  snprintf(otaUrl, sizeof(otaUrl), "http://%d.%d.%d.%d/update", 
-           WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
-  display.displayMessage("OTA", otaUrl);
-  delay(1000);
+    char otaUrl[40];
+    snprintf(otaUrl, sizeof(otaUrl), "http://%d.%d.%d.%d/update", 
+             WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+    display_global.displayMessage("OTA", otaUrl);
+    delay(1000);
+  }
 #else
   LOG_INFO("SERVER", "Serveur web désactivé (MODULE_WEBSERVER_ENABLED=0)");
 #endif
@@ -240,41 +249,48 @@ void setupHardware() {
   
   LOG_INFO("GPIO", "GPIOs configurés");
   
-  // Initialiser l'écran LCD
-  display.setupI2C();
-  if (display.initLCD()) {
-    // Afficher "INIT" pendant 2 secondes au démarrage
-    display.displayWelcomeScreen(true); // Utiliser le mode simple
-    delay(2000); // Attendre 2 secondes
-    
-    // Créer les caractères personnalisés
-    display.createCustomChars();
-    // Initialiser le gestionnaire d'interface (LCD et boutons)
-    uiManager.begin();
-  } else {
-    LOG_ERROR("INIT", "Échec d'initialisation de l'écran LCD");
+  // Initialiser l'écran LCD (objet global display_global)
+
+  LOG_INFO("INIT", "Initialisation de l'écran LCD (global)...");
+  unsigned long lcdInitStartTime = millis();
+  const unsigned long lcdInitTimeoutMs = 7000; // Augmenté pour tests, était 5000
+  bool globalLcdInitialized = false;
+
+  while (millis() - lcdInitStartTime < lcdInitTimeoutMs) {
+      display_global.update(); // Pilote la FSM pour l'écran global
+      if (display_global.isSuccessfullyInitialized()) {
+          globalLcdInitialized = true;
+          break;
+      }
+      // Donner du temps à la FSM pour progresser. setupHardware est appelé depuis initTask.
+      if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) { // Vérifier si le scheduler est démarré
+        vTaskDelay(pdMS_TO_TICKS(20)); // Réduit pour appels plus fréquents
+      } else {
+        delay(20); // Fallback si le scheduler n'est pas encore démarré
+      }
   }
-  
-  // Initialiser les potentiomètres
-  LOG_INFO("POT", "Initialisation des potentiomètres");
-  potManager.begin();
-  
-  // Valider l'initialisation en lisant les valeurs initiales
-  if (potManager.isInitialized()) {
-    LOG_INFO("POT", "Valeurs initiales - Dir: %d, Trim: %d, Longueur: %d", 
-             potManager.getDirection(), potManager.getTrim(), potManager.getLineLength());
+
+  if (globalLcdInitialized) {
+    LOG_INFO("INIT", "Écran LCD (global) initialisé avec succès.");
+    display_global.displayWelcomeScreen(true); // Utiliser le mode simple
+    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) { vTaskDelay(pdMS_TO_TICKS(1000)); } else { delay(1000); } // Réduit, était 2000
+
+    // Créer les caractères personnalisés sur l'écran global
+    display_global.createCustomChars();
+    
+    // Initialiser le gestionnaire d'interface (LCD et boutons)
+    if (!uiManager.begin()) { 
+        LOG_ERROR("INIT", "Échec de l'initialisation de UIManager.");
+    } else {
+        LOG_INFO("INIT", "UIManager initialisé.");
+    }
   } else {
-    LOG_ERROR("POT", "Échec d'initialisation des potentiomètres");
+    LOG_ERROR("INIT", "Échec d'initialisation de l'écran LCD (global) après timeout.");
+    scanI2CBus(); // Appel du scanner I2C si l'écran LCD échoue
   }
   
   // Initialiser les servomoteurs
   servoInitAll();
-  
-  // Initialiser l'interface utilisateur à boutons
-  buttonUI.begin();
-  
-  // Initialiser l'interface utilisateur à boutons
-  buttonUI.begin();
   
   // Initialiser l'interface tableau de bord
   dashboardInit();
@@ -300,7 +316,9 @@ void setupTasks() {
 void onOTAStart() {
   LOG_INFO("OTA", "Mise à jour OTA démarrée");
   digitalWrite(LED_PIN, HIGH);  // LED allumée pendant la mise à jour
-  display.displayMessage("OTA", "Mise à jour démarrée");
+  if (display_global.isSuccessfullyInitialized()) {
+    display_global.displayMessage("OTA", "Mise à jour démarrée");
+  }
 }
 
 /**
@@ -315,7 +333,7 @@ void onOTAProgress(size_t current, size_t final) {
     LOG_INFO("OTA", "Progression: %u / %u octets", current, final);
     
     // Afficher la progression sur l'écran LCD
-    display.displayOTAProgress(current, final);
+    display_global.displayOTAProgress(current, final);
     
     // Faire clignoter la LED pour indiquer l'activité
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
@@ -327,7 +345,7 @@ void onOTAProgress(size_t current, size_t final) {
  * @param success true si la mise à jour a réussi, false sinon
  */
 void onOTAEnd(bool success) {
-    OTAManager::handleOTAEnd(success, LED_PIN, display);
+    OTAManager::handleOTAEnd(success, LED_PIN, display_global);
 }
 
 /**
@@ -359,6 +377,13 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH); // LED allumée pendant l'initialisation
     
+    // Initialisation du bus I2C
+    LOG_INFO("I2C", "Initialisation du bus I2C (SDA: %d, SCL: %d, Freq: 400kHz)", I2C_SDA, I2C_SCL);
+    Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.setClock(400000); // 400kHz
+    Wire.setTimeOut(250); // Définir un timeout de 250ms pour les opérations I2C
+    LOG_INFO("I2C", "Timeout I2C configuré à 250ms.");
+    
     // Création de la tâche principale d'initialisation (avec priorité élevée)
     LOG_INFO("INIT", "Démarrage de la tâche d'initialisation");
     xTaskCreate(
@@ -386,40 +411,45 @@ void initTask(void* parameter) {
         return;
     }
 
-    // Initialisation du matériel
+    // Initialisation du matériel (y compris display_global)
     setupHardware();
 
-    // S'assurer que l'interface utilisateur est correctement initialisée
+    // Initialisation des managers qui dépendent de matériel initialisé
+    // ou qui ont leur propre logique d'initialisation/tâches.
+    
+    // PotentiometerManager - initialisation unique
+    LOG_INFO("INIT_TASK", "Initialisation PotentiometerManager...");
+    potManager.begin();
+    if (potManager.isInitialized()) {
+        LOG_INFO("INIT_TASK", "PotManager OK. Dir: %d, Trim: %d, Len: %d", potManager.getDirection(), potManager.getTrim(), potManager.getLineLength());
+    } else {
+        LOG_ERROR("INIT_TASK", "Échec PotManager.");
+    }
+
+    // ButtonUIManager - dépend de display_global qui doit être initialisé par setupHardware
+    LOG_INFO("INIT_TASK", "Initialisation ButtonUIManager...");
+    if (buttonUI.begin()) { 
+        LOG_INFO("INIT_TASK", "ButtonUIManager OK.");
+    } else {
+        LOG_ERROR("INIT_TASK", "Échec ButtonUIManager.");
+    }
+
+    // S'assurer que l'interface utilisateur (UIManager) est correctement initialisée
     if (!uiManager.isInitialized()) {
-        LOG_WARNING("INIT", "Interface utilisateur non initialisée, nouvelle tentative");
-        // Nouvelle tentative d'initialisation plus explicite
-        uiManager.begin();
-        
-        // Vérifier à nouveau
-        if (!uiManager.isInitialized()) {
-            LOG_ERROR("INIT", "Échec de l'initialisation de l'interface utilisateur après nouvelle tentative");
-        } else {
-            LOG_INFO("INIT", "Interface utilisateur correctement initialisée après nouvelle tentative");
-        }
+        LOG_WARNING("INIT_TASK", "UIManager non initialisé après setupHardware. Nouvelle tentative...");
+    } else {
+        LOG_INFO("INIT_TASK", "UIManager est initialisé.");
     }
     
     // Délai pour s'assurer que tout est correctement initialisé
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    // Initialisation des modules
-    wifiManagerInit();
-    servoInitialize();
-
     // Démarrage des tâches FreeRTOS
+    LOG_INFO("INIT_TASK", "Démarrage des tâches via TaskManager...");
     taskManager.begin(&uiManager, &wifiManager);
-    
-    // Délai pour s'assurer que les ressources sont bien initialisées
-    vTaskDelay(pdMS_TO_TICKS(100));
-    
-    // Démarrage des tâches
     taskManager.startTasks();
 
-    LOG_INFO("INIT", "Système prêt");
+    LOG_INFO("INIT_TASK", "Système prêt.");
 
     // Supprimer la tâche une fois l'initialisation terminée
     vTaskDelete(NULL);

@@ -12,6 +12,8 @@
 
 #include "hardware/sensors/imu.h"
 #include <ArduinoJson.h>
+#include "utils/diagnostics.h" // Ajout pour scanI2CBus
+#include "utils/logging.h"     // Ajout pour LOG_INFO et LOG_ERROR
 
 // Instance globale unique de IMUSensor
 static IMUSensor* _imuSensorInstance = nullptr;
@@ -51,6 +53,15 @@ bool IMUSensor::init(const IMUConfig* config) {
     // Initialisation de l'IMU avec les paramètres par défaut ou spécifiés
     Wire.begin();
     Wire.setClock(400000); // 400kHz I2C clock
+
+    // Vérification de la présence du MPU6050
+    Wire.beginTransmission(IMU_I2C_ADDR);
+    if (Wire.endTransmission() != 0) {
+        LOG_ERROR("IMU", "MPU6050 not found at address 0x%02X", IMU_I2C_ADDR);
+        scanI2CBus(); // Lancer le scan si le MPU6050 n'est pas trouvé
+        return false; // Échec de l'initialisation
+    }
+    LOG_INFO("IMU", "MPU6050 found at address 0x%02X", IMU_I2C_ADDR);
     
     // Réveil du MPU6050
     Wire.beginTransmission(IMU_I2C_ADDR);

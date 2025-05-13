@@ -33,20 +33,20 @@ public:
         BACKLIGHT_ON = 3,
         CLEAR_DISPLAY = 4,
         DONE = 100
+        // Potentiellement ajouter FAILED = 101 si la FSM doit signaler un échec permanent
     };
-    DisplayInitFSM(DisplayManager* mgr) : StateMachine("DisplayInitFSM", INIT_START, 3000, -1), manager(mgr) {}
-    DisplayManager* manager;
-    unsigned long lastActionTime = 0;
-    int retryCount = 0;
-    static constexpr int maxRetries = 3;
+    DisplayInitFSM(DisplayManager* mgr);
+    void reset(); // Pour réinitialiser la FSM
 protected:
-    /**
-     * processState : machine à états élégante et non-bloquante
-     * L'état INIT_START doit toujours retourner immédiatement l'état suivant (I2C_CONFIG)
-     * pour garantir qu'aucun timeout ne soit déclenché sur l'état initial.
-     * Cette pratique est recommandée pour toute FSM professionnelle.
-     */
     int processState(int state) override;
+    // Add these overrides for detailed logging
+    void onEnterState(int newState, int oldState) override;
+    void onExitState(int oldState, int newState) override;
+private:
+    DisplayManager* manager;
+    unsigned long lastActionTime;
+    int retryCount;
+    static constexpr int maxRetries = 3;
 };
 
 /**
@@ -69,8 +69,8 @@ private:
     char screenBuffer[LCD_ROWS][LCD_COLS+1]; // +1 pour le caractère nul de fin de chaîne
     char previousBuffer[LCD_ROWS][LCD_COLS+1];
     
-    // Méthode pour mettre à jour uniquement les caractères modifiés
-    void updateLCDDiff();
+    // Méthode pour que la FSM puisse définir l'état d'initialisation matérielle
+    void setLcdHardwareInitialized(bool initialized) { lcdInitialized = initialized; }
 
 public:
     // Constructeur et destructeur
@@ -79,7 +79,11 @@ public:
     
     // Méthodes d'initialisation
     bool setupI2C();
-    bool initLCD();
+    void update(); // Pour faire avancer la FSM d'initialisation
+    bool isSuccessfullyInitialized() const { 
+        return lcdInitialized && displayInitFsm && (displayInitFsm->getCurrentState() == DisplayInitFSM::DONE); 
+    }
+    bool isLcdHardwareInternallyInitialized() const { return lcdInitialized; } // Pour vérification interne rapide
     void createCustomChars();
     bool checkLCDConnection();
     
@@ -87,6 +91,7 @@ public:
     void clear();
     void centerText(uint8_t row, const char* text);
     void updateMainDisplay();
+    void updateLCDDiff(); // Maintenant publique
     
     // Méthodes d'affichage spéciales
     void displayMessage(const char* title, const char* message, unsigned long duration = 0);
@@ -102,10 +107,12 @@ public:
     
     // Getters et setters
     bool isInitialized() const { return lcdInitialized; }
-    LiquidCrystal_I2C& getLcd() { return lcd; }
+    LiquidCrystal_I2C& getLcd() { return lcd; } // Pour la FSM
     void setLcdInitialized(bool value) { lcdInitialized = value; }
     // FSM d'init LCD
     DisplayInitFSM* displayInitFsm;
+
+    friend class DisplayInitFSM; // Permettre à la FSM d'accéder aux membres privés
 };
 
 #endif // DISPLAY_MANAGER_H
