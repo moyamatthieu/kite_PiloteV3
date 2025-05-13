@@ -99,7 +99,7 @@ public:
     void displayWiFiInfo(const char* ssid, IPAddress ip);
     void displayOTAProgress(size_t current, size_t total);
     void displayOTAStatus(bool success);
-    void displayLiveStatus(int direction, int trim, int lineLength, bool wifiConnected, unsigned long uptime);
+    void displayLiveStatus(int direction, int trim, int lineLength, bool wifiConnected); // Suppression du paramètre uptime
     
     // Méthodes de vérification et récupération
     bool checkAndRecover();

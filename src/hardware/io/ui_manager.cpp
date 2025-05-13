@@ -13,6 +13,7 @@
 #include "hardware/io/ui_manager.h"
 #include "utils/logging.h" 
 #include "core/module.h"
+#include "core/system.h" // <<< AJOUTÉ
 #include <WiFi.h>
 #include <vector>
 #include <string>
@@ -184,9 +185,14 @@ void UIManager::displaySystemStats() {
     char buffer[LCD_COLS + 1];
     this->associatedDisplay->centerText(0, "System Stats");
 
-    // Exemple: Afficher l'uptime (à adapter avec les vraies données)
-    unsigned long uptime_s = millis() / 1000;
-    snprintf(buffer, sizeof(buffer), "Uptime: %lus", uptime_s);
+    // Utiliser SystemInfo.uptimeSeconds
+    SystemInfo currentSystemInfo = getSystemInfo();
+    unsigned long uptime_s = currentSystemInfo.uptimeSeconds;
+    unsigned long hours = uptime_s / 3600;
+    unsigned long minutes = (uptime_s % 3600) / 60;
+    unsigned long seconds = uptime_s % 60; // Afficher aussi les secondes
+
+    snprintf(buffer, sizeof(buffer), "Up: %02lu:%02lu:%02lu", hours, minutes, seconds);
     this->associatedDisplay->centerText(1, buffer);
 
     // Exemple: Afficher la mémoire libre (à adapter)

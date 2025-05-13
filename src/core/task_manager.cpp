@@ -53,7 +53,7 @@
 #include "hardware/sensors/wind.h"
 #include "hardware/actuators/servo.h"
 #include "control/autopilot.h"  // Pour autopilotInit
-#include "core/system.h"        // Pour systemHealthCheck
+#include "core/system.h"        // Pour systemHealthCheck // MODIFIÉ: et updateSystemInfo
 #include "ui/dashboard.h"
 #include "ui/webserver.h"
 #include "core/module.h"
@@ -432,6 +432,9 @@ void TaskManager::monitorTask(void* parameters) {
     for (;;) {
         counter++;
         LOG_INFO("MONITOR", "Surveillance système active (cycle #%lu)", counter);
+
+        // Mettre à jour les informations système (y compris l'uptime)
+        updateSystemInfo();
 
         // Vérification de l'état des tâches principales
         if (displayTaskHandle != nullptr) {

@@ -44,6 +44,7 @@
 #include "hardware/io/display_manager.h" 
 #include "utils/logging.h"             
 #include "core/config.h"               
+#include "core/system.h" // Ajout de l'include pour SystemInfo et getSystemInfo
 #include <Arduino.h>                   
 #include <Wire.h>                      
 #include <WiFi.h> // Ajout pour WiFi.status() et WiFi.SSID()
@@ -313,7 +314,9 @@ void DisplayManager::updateMainDisplay() {
 
   centerText(2, "System OK"); // Placeholder
 
-  unsigned long uptimeSeconds = millis() / 1000;
+  // Utiliser SystemInfo.uptimeSeconds
+  SystemInfo currentSystemInfo = getSystemInfo();
+  unsigned long uptimeSeconds = currentSystemInfo.uptimeSeconds;
   unsigned long hours = uptimeSeconds / 3600;
   unsigned long minutes = (uptimeSeconds % 3600) / 60;
   unsigned long seconds = uptimeSeconds % 60;
@@ -482,9 +485,8 @@ void DisplayManager::displayOTAStatus(bool success) {
  * @param trim Angle de trim (-45 à +45)
  * @param lineLength Longueur de ligne (0 à 100)
  * @param wifiConnected État de la connexion WiFi
- * @param uptime Temps de fonctionnement en secondes
  */
-void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, bool wifiConnected, unsigned long uptime) {
+void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, bool wifiConnected) { // Suppression du paramètre uptime
     if (!isSuccessfullyInitialized()) return;
     clear();
     char temp[LCD_COLS+1];
@@ -496,10 +498,15 @@ void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, 
     strncpy(screenBuffer[1], temp, LCD_COLS);
     screenBuffer[1][LCD_COLS] = '\0';
     
-    unsigned long hours = uptime / 3600;
-    unsigned long minutes = (uptime % 3600) / 60;
-    snprintf(temp, LCD_COLS + 1, "Up: %02luh%02lum", hours, minutes);
-    strncpy(screenBuffer[3], temp, LCD_COLS);
+    // Utiliser SystemInfo.uptimeSeconds
+    SystemInfo currentSystemInfo = getSystemInfo();
+    unsigned long currentUptimeSeconds = currentSystemInfo.uptimeSeconds;
+    unsigned long hours = currentUptimeSeconds / 3600;
+    unsigned long minutes = (currentUptimeSeconds % 3600) / 60;
+    // Affichage des secondes également pour plus de précision
+    unsigned long seconds = currentUptimeSeconds % 60;
+    snprintf(temp, LCD_COLS + 1, "Up: %02lu:%02lu:%02lu", hours, minutes, seconds);
+    strncpy(screenBuffer[3], temp, LCD_COLS); // Affichage sur la 4ème ligne (index 3)
     screenBuffer[3][LCD_COLS] = '\0';
 
     updateLCDDiff();
