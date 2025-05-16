@@ -1,5 +1,5 @@
 #include "../../include/control/safety.h"
-#include "../../include/utils/logging.h"
+#include "../../include/core/logging.h"
 
 void SafetyManager::init() {
     LOG_INFO("SAFETY", "Initialisation du gestionnaire de sécurité");

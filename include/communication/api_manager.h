@@ -10,7 +10,7 @@
 #define API_H
 
 #include <ESPAsyncWebServer.h>
-#include "../../core/config.h"
+#include "core/config.h"
 
 // === CONSTANTES DE L'API ===
 #define API_VERSION "v1"           // Version actuelle de l'API

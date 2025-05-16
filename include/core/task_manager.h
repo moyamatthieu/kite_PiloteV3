@@ -15,14 +15,12 @@
   
   Principales fonctionnalités exposées :
   - TaskManager::begin() : Initialisation du gestionnaire et de ses ressources
-  - TaskManager::startTasks() : Création et démarrage des tâches
-  - TaskManager::stopTasks() : Arrêt des tâches
-  - TaskManager::checkTasksHealth() : Surveillance de l'état des tâches
+  - TaskManager::startManagedTasks() : Création et démarrage des tâches des composants gérés
+  - TaskManager::stopManagedTasks() : Arrêt des tâches des composants gérés
+  - TaskManager::stopAll() : Arrêt de toutes les tâches et nettoyage des ressources
   
   Interactions avec d'autres modules :
-  - UIManager : Gestion de l'interface utilisateur
-  - WiFiManager : Communication sans fil
-  - Tous les modules qui s'exécutent comme des tâches FreeRTOS
+  - ManagedComponent : Gestion des composants gérés dynamiquement
   
   Contraintes techniques :
   - Les tâches ont des priorités différentes (1-24, 24 étant la plus élevée)
@@ -33,134 +31,59 @@
 #ifndef TASK_MANAGER_H
 #define TASK_MANAGER_H
 
-#include <Arduino.h>
+#include <vector>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <freertos/queue.h>
 #include <freertos/semphr.h>
-#include <vector>
-#include <string>
-#include "config.h"
-#include "hardware/io/ui_manager.h"
-#include "communication/wifi_manager.h"
-
-// === STRUCTURES ===
-
-// Structure pour les messages
-typedef struct {
-    uint8_t level;     // Niveau de log
-    char tag[16];      // Tag du message
-    char message[128]; // Contenu du message
-} Message;
-
-// Structure pour les métriques des tâches.
-
-/**
- * Structure pour les métriques des tâches.
- */
-typedef struct {
-    uint32_t cpuUsage;            // Utilisation du CPU par la tâche
-    uint32_t stackHighWaterMark;  // Marque haute de la pile
-    uint32_t lastRunTime;         // Dernière exécution de la tâche
-} TaskStat;
-
-/**
- * Structure pour les paramètres de tâches.
- */
-typedef struct {
-    int taskIndex;       // Index de la tâche
-    void* manager;       // Pointeur vers le gestionnaire associé
-    uint32_t period;     // Période d'exécution de la tâche
-    bool isRealtime;     // Indique si la tâche est en temps réel
-} TaskParams;
-
-/**
- * Structure pour la configuration des tâches.
- */
-typedef struct {
-    const char* name;         // Nom de la tâche
-    TaskFunction_t function;  // Fonction associée à la tâche
-    uint32_t stackSize;       // Taille de la pile
-    UBaseType_t priority;     // Priorité de la tâche
-    BaseType_t core;          // Coeur d'exécution
-    uint32_t period;          // Période d'exécution
-    bool isRealtime;          // Indique si la tâche est en temps réel
-} TaskConfig;
-
-/**
- * Définition d'une tâche
- */
-typedef struct {
-    const char* name;         // Nom de la tâche
-    TaskFunction_t taskFunction;  // Fonction associée à la tâche
-    uint32_t stackSize;       // Taille de la pile
-    UBaseType_t priority;     // Priorité de la tâche
-    TaskHandle_t handle;      // Handle de la tâche
-} TaskDefinition;
+#include "core/component.h" // Pour utiliser ManagedComponent
+#include "core/logging.h"  // Pour LOG_INFO, LOG_ERROR
+#include "core/config.h"    // Pour CONFIG_CORE_DEFAULTS, etc.
+#include <Arduino.h>
+#include <freertos/queue.h>
+#include "component.h" // Correction de l'inclusion
+#include "../common/global_enums.h" // Correction du chemin d'inclusion
 
 // === CLASSE TASK MANAGER ===
 /**
  * Gestionnaire de tâches multiples
- * Permet de gérer et surveiller les tâches FreeRTOS
+ * Permet de gérer et surveiller les tâches FreeRTOS associées aux composants gérés
  */
 class TaskManager {
 private:
-    // Handles des tâches
-    static TaskHandle_t displayTaskHandle;      // Handle pour la tâche d'affichage (rendu statique)
-    static TaskHandle_t buttonTaskHandle;       // Handle pour la tâche des boutons (rendu statique)
-    static TaskHandle_t inputTaskHandle;        // Handle pour la tâche des potentiomètres
-    static TaskHandle_t networkTaskHandle;      // Handle pour la tâche réseau
-    static TaskHandle_t controlTaskHandle;      // Handle pour la tâche de contrôle
-    static TaskHandle_t sensorTaskHandle;       // Handle pour la tâche des capteurs
-    TaskHandle_t wifiMonitorTaskHandle;         // Handle pour la tâche de surveillance WiFi
-    TaskHandle_t systemMonitorTaskHandle;       // Handle pour la tâche de surveillance système
-    
-    // Variables d'état
-    bool running;            // Indique si le gestionnaire est en cours d'exécution
-    bool tasksRunning;       // Indique si les tâches sont en cours d'exécution
-    unsigned long lastTaskMetricsTime; // Dernière mise à jour des métriques
-    
-    // Handles et statistiques des tâches
-    TaskHandle_t taskHandles[MAX_TASKS]; // Tableau des handles des tâches
-    TaskParams* taskParams[MAX_TASKS];   // Tableau des paramètres des tâches
-    TaskStat taskStats[MAX_TASKS];       // Tableau des statistiques des tâches
-    
-    // Ressources partagées
-    static QueueHandle_t messageQueue;      // File de messages partagée
-    static SemaphoreHandle_t displayMutex;  // Mutex pour l'affichage
-    static UIManager* uiManager;            // Pointeur vers le gestionnaire d'interface utilisateur
-    static WiFiManager* wifiManager;        // Pointeur vers le gestionnaire WiFi
-    
-    // Fonctions de tâches
-    static void displayTask(void* parameters);  // Fonction pour la tâche d'affichage
-    static void buttonTask(void* parameters);   // Fonction pour la tâche des boutons
-    static void networkTask(void* parameters);  // Fonction pour la tâche réseau
-    static void controlTask(void* parameters);  // Fonction pour la tâche de contrôle
-    static void inputTask(void* parameters);    // Fonction pour la tâche d'entrée
-    static void monitorTask(void* parameters);  // Fonction pour la tâche de surveillance
-    static void sensorTask(void* parameters);   // Fonction pour la tâche des capteurs
-    
-public:
-    // Constructeur et destructeur
-    TaskManager();  // Constructeur du gestionnaire de tâches
-    ~TaskManager(); // Destructeur du gestionnaire de tâches
-    
-    // Initialisation et démarrage
-    bool begin(UIManager* ui, WiFiManager* wifi); // Initialise le gestionnaire avec les gestionnaires associés
-    bool startTasks();                            // Démarre les tâches gérées
-    void stopTasks();                             // Arrête les tâches gérées
-    void stopAllTasks();                          // Arrête toutes les tâches
-    
-    // Surveillance des tâches
-    void updateTaskMetrics();  // Met à jour les métriques des tâches
-    bool checkTasksHealth();   // Vérifie l'état de santé des tâches
-    
-    // Getters
-    bool isRunning() const { return running; } // Retourne l'état du gestionnaire
+    std::vector<ManagedComponent*> components; // Liste des composants gérés
+    bool running;
+    bool tasksRunning; // Indique si les tâches des composants sont démarrées
 
-    // === API dynamique des modules ===
-    bool setModuleEnabled(const char* name, bool enabled);
-    void getAllModulesStatus(std::vector<std::pair<std::string, std::string>>& out);
+    // La file de messages et le mutex d'affichage pourraient être gérés ailleurs à terme.
+    static QueueHandle_t systemMessageQueue; // Renommé pour plus de clarté
+    static SemaphoreHandle_t displayMutex;   // Conservé pour l'instant
+
+    // La tâche de monitoring est conservée pour l'instant, mais pourrait évoluer.
+    static TaskHandle_t systemMonitorTaskHandle;
+    static void systemMonitorTask(void* parameters);
+
+public:
+    TaskManager();
+    ~TaskManager();
+
+    // Initialise le gestionnaire et enregistre les composants.
+    bool begin(const std::vector<ManagedComponent*>& managedComponents);
+    
+    // Démarre les tâches associées aux composants gérés.
+    bool startManagedTasks();
+    
+    // Arrête les tâches associées aux composants gérés.
+    void stopManagedTasks();
+    
+    // Arrête toutes les tâches et nettoie les ressources.
+    void stopAll(); 
+
+    bool isRunning() const { return running; }
+    bool areTasksRunning() const { return tasksRunning; }
+
+    // Méthodes statiques pour accéder aux ressources partagées (si nécessaire)
+    static QueueHandle_t getSystemMessageQueue();
+    static SemaphoreHandle_t getDisplayMutex(); // Si un accès direct est toujours requis
 };
 
 #endif // TASK_MANAGER_H

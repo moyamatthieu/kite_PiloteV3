@@ -42,7 +42,7 @@
 */
 
 #include "hardware/io/display_manager.h" 
-#include "utils/logging.h"             
+#include "core/logging.h"             
 #include "core/config.h"               
 #include "core/system.h" // Ajout de l'include pour SystemInfo et getSystemInfo
 #include <Arduino.h>                   
@@ -315,8 +315,10 @@ void DisplayManager::updateMainDisplay() {
   centerText(2, "System OK"); // Placeholder
 
   // Utiliser SystemInfo.uptimeSeconds
-  SystemInfo currentSystemInfo = getSystemInfo();
+  SystemInfo_t currentSystemInfo = SystemOrchestrator::getInstance()->getSystemInfo();
   unsigned long uptimeSeconds = currentSystemInfo.uptimeSeconds;
+  LOG_DEBUG("DISPLAY_MGR", "updateMainDisplay - Uptime lu: %lu s", uptimeSeconds);
+
   unsigned long hours = uptimeSeconds / 3600;
   unsigned long minutes = (uptimeSeconds % 3600) / 60;
   unsigned long seconds = uptimeSeconds % 60;
@@ -334,29 +336,32 @@ void DisplayManager::updateMainDisplay() {
  * et ne met à jour que les caractères qui ont changé.
  */
 void DisplayManager::updateLCDDiff() {
-  if (!lcdInitialized) { 
-      LOG_DEBUG("DISPLAY", "Tentative updateLCDDiff mais LCD matériel non initialisé.");
-      return;
-  }
-    bool hasChanges = false;
-    for (int row = 0; row < LCD_ROWS; row++) {
-        for (int col = 0; col < LCD_COLS; col++) {
-            if (screenBuffer[row][col] != previousBuffer[row][col]) {
-                hasChanges = true;
-                lcd.setCursor(col, row);
-                if (screenBuffer[row][col] == '\0') { 
-                    lcd.print(' '); 
-                } else if (screenBuffer[row][col] < 4 && screenBuffer[row][col] >= 0) { 
-                    lcd.write(byte(screenBuffer[row][col]));
-                } else {
-                    lcd.print(screenBuffer[row][col]);
-                }
-                previousBuffer[row][col] = screenBuffer[row][col];
+    if (!isSuccessfullyInitialized()) { // CORRIGÉ: Utiliser isSuccessfullyInitialized()
+        LOG_DEBUG("LCD_DIFF", "Tentative updateLCDDiff mais LCD non prêt.");
+        return;
+    }
+    bool changesDetected = false;
+    for (int i = 0; i < LCD_ROWS; ++i) {
+        if (strcmp(screenBuffer[i], previousBuffer[i]) != 0) { // CORRIGÉ: Utiliser screenBuffer
+            changesDetected = true;
+            lcd.setCursor(0, i);
+            // Pad with spaces to clear previous longer text
+            char paddedLine[LCD_COLS + 1];
+            strncpy(paddedLine, screenBuffer[i], LCD_COLS); // CORRIGÉ: Utiliser screenBuffer
+            for (int j = strlen(screenBuffer[i]); j < LCD_COLS; ++j) { // CORRIGÉ: Utiliser screenBuffer
+                paddedLine[j] = ' ';
             }
+            paddedLine[LCD_COLS] = '\0';
+            lcd.print(paddedLine);
+            LOG_DEBUG("LCD_DIFF", "Ligne %d modifiée: '%s' -> '%s'", i, previousBuffer[i], paddedLine);
+            strncpy(previousBuffer[i], screenBuffer[i], LCD_COLS); // CORRIGÉ: Utiliser screenBuffer et LCD_COLS
+            previousBuffer[i][LCD_COLS] = '\0'; // Ensure null termination using LCD_COLS
         }
     }
-    if (hasChanges) {
-        LOG_DEBUG("DISPLAY", "LCD mise à jour différentielle effectuée");
+    if (changesDetected) {
+        LOG_DEBUG("LCD_DIFF", "Changements détectés et appliqués à l'écran LCD.");
+    } else {
+        // LOG_DEBUG("LCD_DIFF", "Aucun changement détecté, pas de mise à jour LCD."); // Peut être trop verbeux
     }
 }
 
@@ -499,7 +504,7 @@ void DisplayManager::displayLiveStatus(int direction, int trim, int lineLength, 
     screenBuffer[1][LCD_COLS] = '\0';
     
     // Utiliser SystemInfo.uptimeSeconds
-    SystemInfo currentSystemInfo = getSystemInfo();
+    SystemInfo_t currentSystemInfo = SystemOrchestrator::getInstance()->getSystemInfo();
     unsigned long currentUptimeSeconds = currentSystemInfo.uptimeSeconds;
     unsigned long hours = currentUptimeSeconds / 3600;
     unsigned long minutes = (currentUptimeSeconds % 3600) / 60;

@@ -5,31 +5,28 @@
   
   Implémentation du gestionnaire centralisé des états du système.
   
-  Version: 3.0.0
-  Date: 8 mai 2025
+  Version: 3.0.1 
+  Date: 13 mai 2025
   Auteurs: Équipe Kite PiloteV3
   
   ===== FONCTIONNEMENT =====
-  Ce module implémente un gestionnaire d'états qui centralise la gestion des états
-  du système et de ses composants. Il utilise le pattern Singleton pour assurer
-  une instance unique et thread-safe grâce à des mutex FreeRTOS.
+  Ce module implémente un gestionnaire d'états qui centralise la gestion de l'état global
+  du système. Il utilise le pattern Singleton pour assurer une instance unique et 
+  thread-safe grâce à des mutex FreeRTOS.
   
   Principes de fonctionnement :
-  1. Gestion centralisée des états système et composants via un Singleton
+  1. Gestion centralisée de l'état système global via un Singleton
   2. Protection thread-safe avec mutex pour environnement multitâche
   3. Validation des transitions d'état via une matrice de transitions
   4. Journalisation des changements d'état pour diagnostics
   
   Interactions avec d'autres modules :
-  - System : Utilise ce gestionnaire pour suivre l'état global
-  - TaskManager : Prend des décisions basées sur les états
-  - Modules matériels : Signalent leur état via ce gestionnaire
+  - Les ManagedComponents peuvent interroger l'état global du système.
+  - Le SystemOrchestrator (ou équivalent) utilisera ce manager pour les décisions de haut niveau.
 */
 
-#include <map>
-#include <mutex>
 #include "core/system_state_manager.h"
-#include "utils/logging.h"
+#include "core/logging.h"
 
 // Initialisation de l'instance singleton
 SystemStateManager* SystemStateManager::instance = nullptr;
@@ -43,21 +40,22 @@ SystemStateManager::SystemStateManager() {
     
     // Création du mutex pour la protection des accès concurrents
     stateMutex = xSemaphoreCreateMutex();
+    if (stateMutex == nullptr) {
+        LOG_ERROR("STATE", "Échec critique: Impossible de créer stateMutex.");
+    }
     
     // Initialisation du timestamp
     lastStateChangeTime = millis();
     
     // Initialisation de la raison du dernier changement
-    strcpy(lastStateChangeReason, "Initialisation du système");
+    strncpy(lastStateChangeReason, "Initialisation du système", sizeof(lastStateChangeReason) - 1);
+    lastStateChangeReason[sizeof(lastStateChangeReason) - 1] = '\0';
     
     // Initialisation du compteur de transitions
     transitionCount = 0;
     
     // Initialisation de la matrice des transitions valides
     initializeTransitionMatrix();
-    
-    // Initialisation des états des composants
-    resetComponentStates();
     
     LOG_INFO("STATE", "Gestionnaire d'états système initialisé");
 }
@@ -71,6 +69,7 @@ SystemStateManager::~SystemStateManager() {
         vSemaphoreDelete(stateMutex);
         stateMutex = nullptr;
     }
+    LOG_INFO("STATE", "Gestionnaire d'états système détruit.");
 }
 
 /**
@@ -78,7 +77,6 @@ SystemStateManager::~SystemStateManager() {
  * @return Pointeur vers l'instance unique du gestionnaire d'états
  */
 SystemStateManager* SystemStateManager::getInstance() {
-    // Création de l'instance si elle n'existe pas encore
     if (instance == nullptr) {
         instance = new SystemStateManager();
     }
@@ -207,41 +205,6 @@ bool SystemStateManager::transitionTo(SystemState newState, const char* reason) 
 }
 
 /**
- * Met à jour l'état d'un composant
- * @param component Composant à mettre à jour
- * @param state Nouvel état du composant
- * @param reason Raison du changement d'état (optionnel)
- * @return true si la mise à jour a réussi, false sinon
- */
-bool SystemStateManager::updateComponentState(SystemComponent component, ComponentState state, const char* reason) {
-    // Acquisition du mutex
-    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        LOG_ERROR("STATE", "Impossible d'acquérir le mutex pour la mise à jour de l'état du composant");
-        return false;
-    }
-    
-    // Enregistrement de l'ancien état pour le log
-    ComponentState oldState = ComponentState::NOT_INITIALIZED;
-    if (componentStates.find(component) != componentStates.end()) {
-        oldState = componentStates[component];
-    }
-    
-    // Mise à jour de l'état du composant
-    componentStates[component] = state;
-    
-    // Libération du mutex
-    xSemaphoreGive(stateMutex);
-    
-    // Journalisation du changement d'état
-    const char* reasonText = (reason != nullptr) ? reason : "Non spécifié";
-    LOG_INFO("STATE", "État du composant %d: %d -> %d (%s)", 
-             static_cast<int>(component), static_cast<int>(oldState), 
-             static_cast<int>(state), reasonText);
-    
-    return true;
-}
-
-/**
  * Récupère l'état système actuel
  * @return État système actuel
  */
@@ -261,37 +224,10 @@ SystemState SystemStateManager::getCurrentState() {
 }
 
 /**
- * Récupère l'état d'un composant spécifique
- * @param component Composant dont on souhaite connaître l'état
- * @return État du composant
- */
-ComponentState SystemStateManager::getComponentState(SystemComponent component) {
-    // Acquisition du mutex
-    ComponentState state;
-    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Vérification de l'existence du composant dans la map
-        if (componentStates.find(component) != componentStates.end()) {
-            state = componentStates[component];
-        } else {
-            state = ComponentState::NOT_INITIALIZED;
-        }
-        
-        xSemaphoreGive(stateMutex);
-    } else {
-        LOG_ERROR("STATE", "Impossible d'acquérir le mutex pour la lecture de l'état du composant");
-        // Retourner un état par défaut en cas d'échec
-        state = ComponentState::ERROR;
-    }
-    
-    return state;
-}
-
-/**
  * Récupère la raison du dernier changement d'état
  * @return Raison du dernier changement d'état
  */
 const char* SystemStateManager::getLastStateChangeReason() {
-    // Cette méthode doit être thread-safe
     char* reason = nullptr;
     
     if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -322,99 +258,12 @@ unsigned long SystemStateManager::getTimeSinceLastStateChange() {
 }
 
 /**
- * Vérifie si tous les composants sont dans un état spécifique
- * @param state État à vérifier
- * @return true si tous les composants sont dans l'état spécifié, false sinon
- */
-bool SystemStateManager::areAllComponentsInState(ComponentState state) {
-    bool result = true;
-    
-    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Si aucun composant n'est enregistré, retourner false
-        if (componentStates.empty()) {
-            result = false;
-        } else {
-            // Vérifier l'état de chaque composant
-            for (const auto& pair : componentStates) {
-                if (pair.second != state) {
-                    result = false;
-                    break;
-                }
-            }
-        }
-        
-        xSemaphoreGive(stateMutex);
-    } else {
-        LOG_ERROR("STATE", "Impossible d'acquérir le mutex pour vérifier l'état des composants");
-        result = false;
-    }
-    
-    return result;
-}
-
-/**
- * Vérifie si un composant spécifique est dans un état donné
- * @param component Composant à vérifier
- * @param state État à vérifier
- * @return true si le composant est dans l'état spécifié, false sinon
- */
-bool SystemStateManager::isComponentInState(SystemComponent component, ComponentState state) {
-    bool result = false;
-    
-    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Vérification de l'existence du composant dans la map
-        if (componentStates.find(component) != componentStates.end()) {
-            result = (componentStates[component] == state);
-        }
-        
-        xSemaphoreGive(stateMutex);
-    } else {
-        LOG_ERROR("STATE", "Impossible d'acquérir le mutex pour vérifier l'état du composant");
-    }
-    
-    return result;
-}
-
-/**
- * Réinitialise les états des composants
- */
-void SystemStateManager::resetComponentStates() {
-    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Initialisation de tous les composants à NOT_INITIALIZED
-        componentStates.clear();
-        componentStates[SystemComponent::WIFI] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::SERVOS] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::WINCH] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::IMU] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::LCD_DISPLAY] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::BUTTONS] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::AUTOPILOT] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::POWER] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::WEBSERVER] = ComponentState::NOT_INITIALIZED;
-        componentStates[SystemComponent::LINE_SENSOR] = ComponentState::NOT_INITIALIZED;
-        
-        xSemaphoreGive(stateMutex);
-        
-        LOG_INFO("STATE", "États des composants réinitialisés");
-    } else {
-        LOG_ERROR("STATE", "Impossible d'acquérir le mutex pour réinitialiser les états des composants");
-    }
-}
-
-/**
  * Enregistre les états actuels dans le journal
  */
 void SystemStateManager::logSystemState() {
     if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         LOG_INFO("STATE", "État système actuel: %d (%s)", 
                  static_cast<int>(currentState), lastStateChangeReason);
-        
-        // Log de l'état de chaque composant
-        LOG_INFO("STATE", "États des composants:");
-        for (const auto& pair : componentStates) {
-            LOG_INFO("STATE", "  Composant %d: %d", 
-                     static_cast<int>(pair.first), static_cast<int>(pair.second));
-        }
         
         xSemaphoreGive(stateMutex);
     } else {

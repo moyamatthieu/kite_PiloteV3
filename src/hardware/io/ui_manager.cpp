@@ -11,32 +11,12 @@
 */
 
 #include "hardware/io/ui_manager.h"
-#include "utils/logging.h" 
+#include "core/logging.h" 
 #include "core/module.h"
 #include "core/system.h" // <<< AJOUTÉ
 #include <WiFi.h>
 #include <vector>
 #include <string>
-
-// Constructeur
-UIManager::UIManager(DisplayManager* globalDisplay) // Modifié pour prendre un DisplayManager global
-    : associatedDisplay(globalDisplay), // Stocke le pointeur vers le DisplayManager global
-      lcdInitialized(false), // Sera mis à true dans begin() si l'écran associé est prêt
-      displayNeedsUpdate(true),
-      currentDisplayState(DISPLAY_MAIN),
-      currentMenu(MENU_MAIN),
-      currentMenuSelection(0),
-      lastDisplayUpdate(0),
-      lastDisplayCheck(0),
-      lastButtonCheck(0) {
-    
-    // Initialisation des états des boutons
-    for (int i = 0; i < 4; i++) {
-        buttonStates[i] = false;
-        lastButtonStates[i] = false;
-        lastDebounceTime[i] = 0;
-    }
-}
 
 UIManager::~UIManager() {
     // Nettoyage si nécessaire
@@ -131,18 +111,15 @@ void UIManager::centerText(uint8_t row, const char* text) {
 }
 
 void UIManager::updateDisplay() {
-    if (!this->associatedDisplay || !this->associatedDisplay->isSuccessfullyInitialized()) {
-        return;
-    }
-    
     unsigned long currentTime = millis();
-    if (!displayNeedsUpdate && (currentTime - lastDisplayUpdate < DISPLAY_UPDATE_INTERVAL)) {
-        return;
+
+    // Vérifier si une mise à jour est nécessaire en fonction de l'état ou du temps écoulé
+    if (this->currentDisplayState != this->lastDisplayState || this->displayNeedsUpdate) { // CORRIGÉ: Utilisation des membres corrects
+        LOG_DEBUG("UI_MGR", "Mise à jour forcée ou changement d'état. État actuel: %d, Dernier état: %d, Force: %s", this->currentDisplayState, this->lastDisplayState, this->displayNeedsUpdate ? "oui" : "non"); 
     }
-    
-    lastDisplayUpdate = currentTime;
-    displayNeedsUpdate = false;
-    
+
+    LOG_DEBUG("UI_MGR", "updateDisplay appelé. État: %d", this->currentDisplayState); 
+
     switch (currentDisplayState) {
         case DISPLAY_MAIN:
             updateMainDisplay();
@@ -164,6 +141,8 @@ void UIManager::updateDisplay() {
             updateMainDisplay();
             break;
     }
+    this->lastDisplayState = this->currentDisplayState; // Mettre à jour le dernier état
+    this->displayNeedsUpdate = false; // Réinitialiser le drapeau de mise à jour forcée
 }
 
 void UIManager::displayMessage(const char* title, const char* message) {
@@ -186,7 +165,7 @@ void UIManager::displaySystemStats() {
     this->associatedDisplay->centerText(0, "System Stats");
 
     // Utiliser SystemInfo.uptimeSeconds
-    SystemInfo currentSystemInfo = getSystemInfo();
+    SystemInfo_t currentSystemInfo = SystemOrchestrator::getInstance()->getSystemInfo();
     unsigned long uptime_s = currentSystemInfo.uptimeSeconds;
     unsigned long hours = uptime_s / 3600;
     unsigned long minutes = (uptime_s % 3600) / 60;

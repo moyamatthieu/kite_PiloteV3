@@ -3,7 +3,7 @@
 #include "../../include/hardware/io/display_manager.h"
 #include "../../include/core/system.h"
 #include "utils/diagnostics.h"
-#include "utils/logging.h" // Pour LOG_INFO, LOG_ERROR
+#include "core/logging.h" // Pour LOG_INFO, LOG_ERROR
 #include <Wire.h>          // Pour la communication I2C
 
 // Implémentation de la fonction de scan du bus I2C

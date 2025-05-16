@@ -27,7 +27,7 @@
 */
 
 #include "utils/error_manager.h"
-#include "utils/logging.h"
+#include "core/logging.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <cstring>

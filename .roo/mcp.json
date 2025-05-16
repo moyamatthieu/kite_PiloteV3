@@ -1,3 +1,9 @@
 {
-  "mcpServers": {}
+  "mcp": {
+    "servers": {
+      "skeet.build": {
+        "url": "https://skeet.sh/ot/300a2197a555d7c039208f9d7710e57ecea6b88a428eaca1f4dd1ef1f29303d6"
+      }
+    }
+  }
 }

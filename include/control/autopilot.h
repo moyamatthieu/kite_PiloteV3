@@ -14,8 +14,8 @@
 #define AUTOPILOT_H
 
 #include <Arduino.h>
-#include "../hardware/sensors/imu.h"
-#include "../core/config.h"
+#include "hal/drivers/imu_driver.h"
+#include "core/config.h"
 
 // === CONSTANTES ===
 
@@ -96,7 +96,7 @@ bool setAutopilotMode(AutopilotMode mode);
 AutopilotMode getAutopilotMode();
 
 // Mettre à jour l'autopilote avec les dernières données IMU
-void autopilotUpdate(const IMUData& imuData);
+void autopilotUpdate(const ProcessedIMUData& imuData);
 
 // Régler les paramètres de l'autopilote
 bool setAutopilotParameters(const AutopilotParameters& params);

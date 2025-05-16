@@ -40,8 +40,8 @@
 #include "core/logging.h"
 #include "control/trajectory.h"
 #include "control/safety.h"
-#include "hardware/actuators/servo.h"
-#include "hardware/sensors/wind.h"
+#include "hal/drivers/servo_driver.h"
+#include "hal/drivers/wind_driver.h"
 #include <cmath> // Pour sqrt et autres fonctions mathématiques
 
 // Variables statiques
@@ -73,7 +73,7 @@ static void calculateTrajectory();
 static bool checkSafetyConditions();
 
 // Mettre à jour le niveau de confiance
-static void updateConfidence(const IMUData& imuData);
+static void updateConfidence(const ProcessedIMUData& imuData);
 
 // Mettre à jour l'état de l'autopilote
 static void updateAutopilotState();
@@ -109,7 +109,7 @@ bool autopilotInit() {
   // Marquer comme initialisé
   isInitialized = true;
   
-  logPrint((LogLevel)LOG_LEVEL_INFO, "APLT", "Autopilote initialisé avec succès");
+  LOG_INFO("APLT", "Autopilote initialisé avec succès");
   return true;
 }
 
@@ -117,20 +117,20 @@ bool autopilotInit() {
 // Permet de passer entre les différents modes de vol (manuel, automatique, etc.)
 bool setAutopilotMode(AutopilotMode mode) {
   if (!isInitialized) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Tentative de changement de mode sans initialisation");
+    LOG_ERROR("APLT", "Tentative de changement de mode sans initialisation");
     return false;
   }
   
   // Vérifier si le mode est valide
   if (mode < AUTOPILOT_OFF || mode > AUTOPILOT_CALIBRATION) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Mode d'autopilote invalide: %d", mode);
+    LOG_ERROR("APLT", "Mode d'autopilote invalide: %d", mode);
     return false;
   }
   
   // Vérifier les conditions pour activer certains modes
   if (mode != AUTOPILOT_OFF && mode != AUTOPILOT_EMERGENCY) {
     if (!checkSafetyConditions()) {
-      logPrint((LogLevel)LOG_LEVEL_WARNING, "APLT", "Conditions de sécurité non remplies pour le mode %d", mode);
+      LOG_WARNING("APLT", "Conditions de sécurité non remplies pour le mode %d", mode);
       return false;
     }
   }
@@ -169,7 +169,7 @@ bool setAutopilotMode(AutopilotMode mode) {
       break;
   }
   
-  logPrint((LogLevel)LOG_LEVEL_INFO, "APLT", "Mode changé: %d -> %d", previousMode, mode);
+  LOG_INFO("APLT", "Mode changé: %d -> %d", previousMode, mode);
   return true;
 }
 
@@ -177,7 +177,7 @@ AutopilotMode getAutopilotMode() {
   return autopilotState.currentMode;
 }
 
-void autopilotUpdate(const IMUData& imuData) {
+void autopilotUpdate(const ProcessedIMUData& imuData) {
   if (!isInitialized) {
     return;
   }
@@ -202,7 +202,7 @@ void autopilotUpdate(const IMUData& imuData) {
   // Vérifier les conditions de sécurité en mode actif
   if (autopilotState.currentMode != AUTOPILOT_OFF && autopilotState.currentMode != AUTOPILOT_EMERGENCY) {
     if (!checkSafetyConditions()) {
-      logPrint((LogLevel)LOG_LEVEL_WARNING, "APLT", "Conditions de sécurité non remplies, activation du mode urgence");
+      LOG_WARNING("APLT", "Conditions de sécurité non remplies, activation du mode urgence");
       setAutopilotMode(AUTOPILOT_EMERGENCY);
     }
   }
@@ -221,43 +221,43 @@ void autopilotUpdate(const IMUData& imuData) {
 
 bool setAutopilotParameters(const AutopilotParameters& params) {
   if (!isInitialized) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Tentative de définition des paramètres sans initialisation");
+    LOG_ERROR("APLT", "Tentative de définition des paramètres sans initialisation");
     return false;
   }
   
   // Valider les paramètres
   if (params.figure8Width < 10 || params.figure8Width > 90) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Largeur de figure en 8 invalide: %d", params.figure8Width);
+    LOG_ERROR("APLT", "Largeur de figure en 8 invalide: %d", params.figure8Width);
     return false;
   }
   
   if (params.figure8Height < 10 || params.figure8Height > 45) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Hauteur de figure en 8 invalide: %d", params.figure8Height);
+    LOG_ERROR("APLT", "Hauteur de figure en 8 invalide: %d", params.figure8Height);
     return false;
   }
   
   if (params.turnSpeed < 1 || params.turnSpeed > 10) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Vitesse de virage invalide: %d", params.turnSpeed);
+    LOG_ERROR("APLT", "Vitesse de virage invalide: %d", params.turnSpeed);
     return false;
   }
   
   if (params.aggressiveness < 1 || params.aggressiveness > 10) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Agressivité invalide: %d", params.aggressiveness);
+    LOG_ERROR("APLT", "Agressivité invalide: %d", params.aggressiveness);
     return false;
   }
   
   if (params.windAdaptation < 1 || params.windAdaptation > 10) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Adaptation au vent invalide: %d", params.windAdaptation);
+    LOG_ERROR("APLT", "Adaptation au vent invalide: %d", params.windAdaptation);
     return false;
   }
   
   if (params.maxAltitude < 10 || params.maxAltitude > 500) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Altitude maximale invalide: %d", params.maxAltitude);
+    LOG_ERROR("APLT", "Altitude maximale invalide: %d", params.maxAltitude);
     return false;
   }
   
   if (params.maxLineLength < 1000 || params.maxLineLength > 30000) {
-    logPrint((LogLevel)LOG_LEVEL_ERROR, "APLT", "Longueur maximale de ligne invalide: %d", params.maxLineLength);
+    LOG_ERROR("APLT", "Longueur maximale de ligne invalide: %d", params.maxLineLength);
     return false;
   }
   
@@ -403,7 +403,7 @@ static bool checkSafetyConditions() {
   return true;
 }
 
-static void updateConfidence(const IMUData& imuData) {
+static void updateConfidence(const ProcessedIMUData& imuData) {
   // Cette fonction calculerait le niveau de confiance basé sur différents facteurs
   // Pour l'instant, c'est une version simplifiée
   

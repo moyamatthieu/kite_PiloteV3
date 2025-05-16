@@ -42,22 +42,27 @@
 #include <Wire.h>                // Gestion du bus I2C
 
 // === INCLUSIONS DES MODULES CENTRAUX DU PROJET ===
-#include "utils/logging.h"       // Fonctions et macros de journalisation
+#include "core/logging.h"       // Fonctions et macros de journalisation
 #include "core/config.h"         // Constantes de configuration globale (pins, timings)
 #include "core/system.h"         // Gestion de l'état système et watchdog
-#include "core/task_manager.h"   // Orchestration des tâches FreeRTOS
+#include "core/system_orchestrator.h"
+#include "core/task_manager.h"
+#include "core/component.h"      // Chemin d'inclusion corrigé
 
-// === INCLUSIONS MODULES HARDWARE ===
+// === INCLUSIONS MODULES HARDWARE ET DRIVERS ===
 // Capteurs
-#include "hardware/sensors/imu.h"
-#include "hardware/sensors/line_length.h" // Capteur de longueur de ligne
-#include "hardware/sensors/tension.h"     // Capteur de tension
-#include "hardware/sensors/wind.h"        // Capteur de vent
+#include "hal/drivers/imu_driver.h"           // IMU
+#include "hal/drivers/line_length_driver.h"   // Capteur de longueur de ligne
+#include "hal/drivers/tension_driver.h"       // Capteur de tension
+#include "hal/drivers/wind_driver.h"          // Capteur de vent
 // Actionneurs
-#include "hardware/actuators/servo.h"     // Servomoteurs
-#include "hardware/actuators/generator.h" // Actionneur générateur
-#include "hardware/actuators/winch.h"     // Treuil
+#include "hal/drivers/servo_driver.h"         // Servomoteurs
+#include "hardware/actuators/generator.h"     // Actionneur générateur
+#include "hal/drivers/winch_driver.h"         // Treuil
 // E/S
+#include "hal/drivers/buttons_driver.h"       // Boutons
+#include "hal/drivers/display_driver.h"       // Écran LCD
+#include "hal/drivers/potentiometer_driver.h" // Potentiomètres
 #include "hardware/io/ui_manager.h"
 #include "hardware/io/button_ui.h"
 #include "hardware/io/potentiometer_manager.h"
@@ -238,9 +243,17 @@ void setupHardware() {
   pinMode(LED_PIN, OUTPUT);
   // Broches des boutons (config centralisée)
   pinMode(BUTTON_BACK_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
   pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+  // Note: Nous utilisons maintenant ButtonsDriver pour gérer les boutons
+  
+  // Initialiser un pilote de boutons HAL
+  ButtonsDriver* buttonsDriver = new ButtonsDriver("MainButtonsDriver");
+  if (buttonsDriver->initialize() != ErrorCode::OK) {
+    LOG_ERROR("INIT", "Échec de l'initialisation de ButtonsDriver");
+  } else {
+    LOG_INFO("INIT", "ButtonsDriver initialisé avec succès");
+  }
 
   // LED clignote une fois pour indiquer l'initialisation réussie
   digitalWrite(LED_PIN, HIGH);
@@ -289,8 +302,15 @@ void setupHardware() {
     scanI2CBus(); // Appel du scanner I2C si l'écran LCD échoue
   }
   
-  // Initialiser les servomoteurs
-  servoInitAll();
+  // Initialiser les servomoteurs avec ServoDriver (HAL)
+  // Utilisons la classe ServoDriver directement maintenant qu'elle implémente actuate()
+  ServoDriver* servoDriver = new ServoDriver("MainServoDriver");
+  
+  if (servoDriver->initialize() != ErrorCode::OK) {
+    LOG_ERROR("INIT", "Échec de l'initialisation du ServoDriver");
+  } else {
+    LOG_INFO("INIT", "ServoDriver initialisé avec succès");
+  }
   
   // Initialiser l'interface tableau de bord
   dashboardInit();
@@ -303,9 +323,20 @@ void setupHardware() {
  * Configure et démarre les tâches FreeRTOS
  */
 void setupTasks() {
-    // Initialiser le gestionnaire de tâches avec les bons arguments
-    taskManager.begin(&uiManager, &wifiManager);
-    taskManager.startTasks();
+    // Créer un vecteur de composants gérés
+    std::vector<ManagedComponent*> managedComponents;
+    
+    // Ajouter les composants au vecteur (si ce sont des ManagedComponent)
+    if (dynamic_cast<ManagedComponent*>(&uiManager)) {
+        managedComponents.push_back(dynamic_cast<ManagedComponent*>(&uiManager));
+    }
+    if (dynamic_cast<ManagedComponent*>(&wifiManager)) {
+        managedComponents.push_back(dynamic_cast<ManagedComponent*>(&wifiManager));
+    }
+    
+    // Initialiser le gestionnaire de tâches avec le vecteur de composants
+    taskManager.begin(managedComponents);
+    taskManager.startManagedTasks(); // Correction: startManagedTasks au lieu de startTasks
   
     LOG_INFO("TASKS", "Tâches FreeRTOS démarrées");
 }
@@ -370,7 +401,7 @@ void setup() {
     delay(100); // Court délai pour que le moniteur série s'initialise
     
     // Initialisation des logs (premier composant à initialiser)
-    logInit(LOG_LEVEL_INFO, 115200);
+    logInit(LogLevel::INFO, 115200); // Correction: utilisation de LogLevel::INFO au lieu de LOG_LEVEL_INFO
     LOG_INFO("INIT", "Démarrage Kite PiloteV3, version : %s", SYSTEM_VERSION);
     
     // Configuration des broches de diagnostic (LED uniquement)
@@ -404,9 +435,10 @@ void setup() {
  * @param parameter Paramètre passé à la tâche (non utilisé ici)
  */
 void initTask(void* parameter) {
-    // Initialisation du système
-    if (systemInit() != SYS_OK) {
-        LOG_ERROR("SYS", "Échec de l'initialisation du système");
+    // Initialisation du système orchestrator
+    SystemOrchestrator* orchestrator = SystemOrchestrator::getInstance();
+    if (!orchestrator || orchestrator->initialize() != ErrorCode::OK) {
+        LOG_ERROR("SYS", "Échec de l'initialisation du système orchestrator");
         vTaskDelete(NULL);
         return;
     }
@@ -446,8 +478,21 @@ void initTask(void* parameter) {
 
     // Démarrage des tâches FreeRTOS
     LOG_INFO("INIT_TASK", "Démarrage des tâches via TaskManager...");
-    taskManager.begin(&uiManager, &wifiManager);
-    taskManager.startTasks();
+    
+    // Créer un vecteur de composants gérés
+    std::vector<ManagedComponent*> managedComponents;
+    
+    // Ajouter les composants au vecteur (si ce sont des ManagedComponent)
+    if (dynamic_cast<ManagedComponent*>(&uiManager)) {
+        managedComponents.push_back(dynamic_cast<ManagedComponent*>(&uiManager));
+    }
+    if (dynamic_cast<ManagedComponent*>(&wifiManager)) {
+        managedComponents.push_back(dynamic_cast<ManagedComponent*>(&wifiManager));
+    }
+    
+    // Initialiser le gestionnaire de tâches avec le vecteur de composants
+    taskManager.begin(managedComponents);
+    taskManager.startManagedTasks(); // Correction: startManagedTasks au lieu de startTasks
 
     LOG_INFO("INIT_TASK", "Système prêt.");
 

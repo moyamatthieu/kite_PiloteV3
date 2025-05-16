@@ -14,9 +14,9 @@
 #define DASHBOARD_H
 
 #include <Arduino.h>
-#include "../../core/config.h"
-#include "../../control/autopilot.h"
-#include "../../hardware/sensors/imu.h"
+#include "core/config.h"
+#include "control/autopilot.h"
+#include "hal/drivers/imu_driver.h"
 
 // === DÉFINITION DES TYPES ===
 
@@ -107,7 +107,7 @@ bool dashboardUpdateSystem(uint32_t uptime, uint32_t freeHeap, uint8_t cpuUsage,
  * @param imuData Données de l'IMU
  * @return true si succès, false si échec
  */
-bool dashboardUpdateKite(const IMUData& imuData);
+bool dashboardUpdateKite(const ProcessedIMUData& imuData);
 
 /**
  * Met à jour les données de contrôle dans le tableau de bord

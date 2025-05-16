@@ -11,7 +11,7 @@
 */
 
 #include "../../include/ui/dashboard.h"
-#include "../../include/utils/logging.h"
+#include "core/logging.h" // Correction du chemin d'accès
 #include "../../include/core/config.h"
 #include <Arduino.h>
 

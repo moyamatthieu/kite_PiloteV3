@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include "../common/global_enums.h" // Ajout de l'include pour les enums globaux
 
 /**
  * Classe de base pour tous les modules dynamiques du système.
@@ -9,16 +10,12 @@
  */
 class Module {
 public:
-    enum class State {
-        MODULE_DISABLED,
-        MODULE_ENABLING,
-        MODULE_ENABLED,
-        MODULE_DISABLING,
-        MODULE_ERROR
-    };
+    // Utilisation de ComponentState de global_enums.h
 
     Module(const char* name, bool enabledByDefault = true)
-        : _name(name), _enabled(enabledByDefault), _state(enabledByDefault ? State::MODULE_ENABLED : State::MODULE_DISABLED) {}
+        : _name(name), 
+          _enabled(enabledByDefault), 
+          _state(enabledByDefault ? ComponentState::ACTIVE : ComponentState::COMPONENT_DISABLED) {}
 
     virtual ~Module() {}
 
@@ -26,20 +23,22 @@ public:
     const char* name() const { return _name; }
 
     // Activation/désactivation dynamique
-    virtual void enable()    { _enabled = true;  _state = State::MODULE_ENABLED;   onEnable(); }
-    virtual void disable()   { _enabled = false; _state = State::MODULE_DISABLED;  onDisable(); }
+    virtual void enable()    { _enabled = true;  _state = ComponentState::ACTIVE;   onEnable(); }
+    virtual void disable()   { _enabled = false; _state = ComponentState::COMPONENT_DISABLED;  onDisable(); }
     bool isEnabled()   const { return _enabled; }
-    State state()      const { return _state; }
+    ComponentState state()      const { return _state; }
 
     // Pour reporting LCD/web : état lisible
     virtual const char* stateString() const {
         switch (_state) {
-            case State::MODULE_ENABLED:   return "ON";
-            case State::MODULE_DISABLED:  return "OFF";
-            case State::MODULE_ENABLING:  return "ENABLING";
-            case State::MODULE_DISABLING: return "DISABLING";
-            case State::MODULE_ERROR:     return "ERROR";
-            default:               return "?";
+            case ComponentState::UNINITIALIZED: return "UNINIT";
+            case ComponentState::INITIALIZING:  return "INIT...";
+            case ComponentState::IDLE:          return "IDLE";
+            case ComponentState::ACTIVE:        return "ACTIVE";
+            case ComponentState::SUSPENDED:     return "SUSPEND";
+            case ComponentState::ERROR:         return "ERROR";
+            case ComponentState::COMPONENT_DISABLED: return "OFF";
+            default:                            return "?";
         }
     }
 
@@ -53,12 +52,12 @@ protected:
     // Surchargeable pour actions spécifiques
     virtual void onEnable()  {}
     virtual void onDisable() {}
-    void setState(State s) { _state = s; }
+    void setState(ComponentState s) { _state = s; }
 
 private:
     const char* _name;
     bool _enabled;
-    State _state;
+    ComponentState _state;
 };
 
 /**
@@ -97,9 +96,9 @@ public:
     SensorModule(const char* name, bool enabledByDefault = true)
         : Module(name, enabledByDefault) {}
     // FSM dédiée (composition)
-    // StateMachine fsm;
+    // StateMachine fsm; // Pourrait utiliser ComponentState
     // Gestion d'erreur dédiée
-    // ErrorManager errorManager;
+    // ErrorManager errorManager; // Pourrait utiliser ErrorCode
     // Méthodes de configuration
     virtual void configure(const std::string& jsonConfig) {}
     // Méthode polymorphe pour lecture capteur
@@ -112,9 +111,9 @@ public:
     ActuatorModule(const char* name, bool enabledByDefault = true)
         : Module(name, enabledByDefault) {}
     // FSM dédiée (composition)
-    // StateMachine fsm;
+    // StateMachine fsm; // Pourrait utiliser ComponentState
     // Gestion d'erreur dédiée
-    // ErrorManager errorManager;
+    // ErrorManager errorManager; // Pourrait utiliser ErrorCode
     // Méthodes de configuration
     virtual void configure(const std::string& jsonConfig) {}
     // Méthode polymorphe pour actionner

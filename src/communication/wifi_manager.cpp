@@ -74,17 +74,9 @@
 #include <string>
 
 // Implémentation de la classe WiFiManager
-WiFiManager::WiFiManager() {
-    memset(ssid, 0, sizeof(ssid));
-    memset(password, 0, sizeof(password));
-    connected = false;
-    apActive = false;
-    lastConnectAttempt = 0;
-    timeout = 10000;
-}
-
+// Le constructeur est maintenant dans le fichier d'en-tête
 WiFiManager::~WiFiManager() {
-    stop();
+    stop(); // S'assurer que tout est arrêté proprement
 }
 
 bool WiFiManager::begin(const char* ssid, const char* password, uint32_t timeout) {

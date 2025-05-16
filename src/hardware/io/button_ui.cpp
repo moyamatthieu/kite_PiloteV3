@@ -11,7 +11,7 @@
 */
 
 #include "hardware/io/button_ui.h"
-#include "utils/logging.h"
+#include "core/logging.h"
 
 // Constantes locales
 #define DEBOUNCE_DELAY 50    // Délai d'antirebond en ms

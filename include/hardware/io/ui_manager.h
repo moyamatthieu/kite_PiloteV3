@@ -17,7 +17,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-#include "../../core/config.h"
+#include "core/config.h"
+#include "core/component.h"  // Ajout de l'inclusion pour ManagedComponent
 #include "display_manager.h"
 
 #ifndef MAX_BUTTONS
@@ -50,13 +51,29 @@ enum MenuState {
 };
 
 // Gestionnaire unifié de l'interface utilisateur
-class UIManager {
+class UIManager : public ManagedComponent {
 public:
-    UIManager(DisplayManager* globalDisplay); // Modifié pour prendre un pointeur vers le DisplayManager global
-    ~UIManager();
+    UIManager(DisplayManager* globalDisplay = nullptr)
+        : ManagedComponent("UIManager", true), // Initialisation de ManagedComponent
+          associatedDisplay(globalDisplay) {}
+          
+    ~UIManager() override;
     
     // Initialisation
     bool begin();
+    ErrorCode initialize() override {
+        setState(ComponentState::INITIALIZING);
+        bool result = begin();
+        setState(result ? ComponentState::IDLE : ComponentState::ERROR);
+        return result ? ErrorCode::OK : ErrorCode::COMPONENT_INITIALIZATION_ERROR;
+    }
+    
+    // Mise à jour périodique implémentant la méthode virtuelle de ManagedComponent
+    void update() override {
+        checkButtons();
+        updateDisplay();
+        checkDisplayStatus();
+    }
     
     // Gestion de l'affichage
     void clear();
@@ -105,6 +122,7 @@ private:
     bool lcdInitialized;       // Indique si l'écran associé est prêt ET si UIManager est prêt
     bool displayNeedsUpdate;
     DisplayState currentDisplayState;
+    DisplayState lastDisplayState; // <<< AJOUTÉ pour suivre l'état précédent
     MenuState currentMenu;
     uint8_t currentMenuSelection;
     

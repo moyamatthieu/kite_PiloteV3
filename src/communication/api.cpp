@@ -11,7 +11,7 @@
 */
 
 #include "communication/api_manager.h"
-#include "utils/logging.h"
+#include "core/logging.h"
 #include "core/module.h"
 #include <ArduinoJson.h>
 

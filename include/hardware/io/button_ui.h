@@ -4,11 +4,8 @@
 #include "hardware/io/display_manager.h"
 #include "../../core/config.h" // Inclure config.h pour les définitions de broches
 
-// Define button constants to resolve undefined identifier errors
-#define BUTTON_UP 0
-#define BUTTON_DOWN 1
-#define BUTTON_SELECT 2
-#define BUTTON_BACK 3
+// Les définitions de boutons ont été déplacées dans config.h
+// Ne pas redéfinir ici pour éviter les conflits
 
 /**
  * Classe de gestion des boutons de l'interface utilisateur

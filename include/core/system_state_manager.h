@@ -2,11 +2,11 @@
 #define SYSTEM_STATE_MANAGER_H
 
 #include <Arduino.h>
-#include <map>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include "common/global_enums.h" // Pour SystemState et potentiellement ErrorCode
 
-// Énumération des états système principaux
+// L'énumération SystemState est conservée telle quelle.
 enum class SystemState {
     INIT,           // Initialisation en cours
     READY,          // Prêt à fonctionner
@@ -18,32 +18,6 @@ enum class SystemState {
     SAFE_MODE,      // Mode sécurisé
     SHUTDOWN        // Arrêt en cours
 };
-
-// Énumération des composants système
-enum class SystemComponent {
-    WIFI,           // Module WiFi
-    SERVOS,         // Servomoteurs
-    WINCH,          // Treuil
-    IMU,            // Unité de mesure inertielle
-    LCD_DISPLAY,    // Affichage LCD (renommé pour éviter le conflit avec Arduino)
-    BUTTONS,        // Interface boutons
-    AUTOPILOT,      // Pilote automatique
-    POWER,          // Gestion de l'alimentation
-    WEBSERVER,      // Serveur web
-    LINE_SENSOR     // Capteur de longueur de ligne
-};
-
-// États possibles pour les composants
-enum class ComponentState {
-    NOT_INITIALIZED,    // Non initialisé
-    INITIALIZING,       // En cours d'initialisation
-    OPERATIONAL,        // Opérationnel
-    ERROR,              // En erreur
-    RECOVERING,         // En cours de récupération
-    INACTIVE,           // Désactivé volontairement
-    POWER_SAVE,         // En mode économie d'énergie
-    CALIBRATING         // En cours de calibration
-}; // Fin de l'énumération ComponentState
 
 // Structure pour les transitions d'état
 struct StateTransition {
@@ -64,9 +38,6 @@ private:
     
     // État système actuel
     SystemState currentState;
-    
-    // États des différents composants
-    std::map<SystemComponent, ComponentState> componentStates;
     
     // Mutex pour la protection des accès concurrents
     SemaphoreHandle_t stateMutex;
@@ -100,14 +71,8 @@ public:
     // Tente une transition vers un nouvel état système
     bool transitionTo(SystemState newState, const char* reason = nullptr);
     
-    // Met à jour l'état d'un composant
-    bool updateComponentState(SystemComponent component, ComponentState state, const char* reason = nullptr);
-    
     // Récupère l'état système actuel
     SystemState getCurrentState();
-    
-    // Récupère l'état d'un composant spécifique
-    ComponentState getComponentState(SystemComponent component);
     
     // Récupère la raison du dernier changement d'état
     const char* getLastStateChangeReason();
@@ -115,16 +80,7 @@ public:
     // Récupère le temps écoulé depuis le dernier changement d'état (ms)
     unsigned long getTimeSinceLastStateChange();
     
-    // Vérifie si tous les composants sont dans un état spécifique
-    bool areAllComponentsInState(ComponentState state);
-    
-    // Vérifie si un composant spécifique est dans un état donné
-    bool isComponentInState(SystemComponent component, ComponentState state);
-    
-    // Réinitialise les états des composants
-    void resetComponentStates();
-    
-    // Enregistre les états actuels dans le journal
+    // Enregistre les états actuels dans le journal (uniquement l'état système global)
     void logSystemState();
 };
 

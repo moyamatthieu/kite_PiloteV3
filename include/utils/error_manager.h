@@ -5,49 +5,12 @@
 #include <vector>
 #include <string>
 #include <map>
+#include "common/global_enums.h" // Utiliser l'enum ErrorCode défini dans common/global_enums.h
 
 /**
- * Codes d'erreur standardisés pour tout le système
+ * Gestionnaire d'erreurs standardisé pour tout le système
+ * Utilise l'enum ErrorCode défini dans common/global_enums.h
  */
-enum class ErrorCode {
-    SUCCESS = 0,          // Aucune erreur
-    
-    // Erreurs générales (1-99)
-    UNKNOWN_ERROR = 1,    // Erreur inconnue
-    TIMEOUT = 2,          // Délai d'attente dépassé
-    INVALID_STATE = 3,    // État système invalide
-    INVALID_PARAMETER = 4, // Paramètre invalide
-    
-    // Erreurs matérielles (100-199)
-    HARDWARE_FAILURE = 100, // Défaillance matérielle générique
-    SENSOR_ERROR = 101,    // Erreur de capteur
-    ACTUATOR_ERROR = 102,  // Erreur d'actionneur
-    SERVO_ERROR = 103,     // Erreur de servomoteur
-    WINCH_ERROR = 104,     // Erreur de treuil
-    IMU_ERROR = 105,       // Erreur d'IMU
-    DISPLAY_ERROR = 106,   // Erreur d'affichage
-    
-    // Erreurs de communication (200-299)
-    COMMUNICATION_ERROR = 200, // Erreur de communication générique
-    WIFI_CONNECTION_ERROR = 201, // Erreur de connexion WiFi
-    NETWORK_TIMEOUT = 202,     // Timeout réseau
-    SERVER_ERROR = 203,        // Erreur du serveur web
-    API_ERROR = 204,           // Erreur d'API
-    
-    // Erreurs de ressources (300-399)
-    RESOURCE_ERROR = 300,     // Erreur de ressource générique
-    OUT_OF_MEMORY = 301,      // Mémoire insuffisante
-    FILE_ERROR = 302,         // Erreur de fichier
-    
-    // Erreurs de configuration (400-499)
-    CONFIG_ERROR = 400,       // Erreur de configuration générique
-    INVALID_CONFIG = 401,     // Configuration invalide
-    
-    // Erreurs d'exécution (500-599)
-    RUNTIME_ERROR = 500,      // Erreur d'exécution générique
-    TASK_CREATION_ERROR = 501, // Erreur de création de tâche
-    MUTEX_ERROR = 502,        // Erreur de mutex
-};
 
 /**
  * Niveaux de sévérité pour les erreurs
@@ -106,7 +69,7 @@ private:
     SemaphoreHandle_t errorMutex;
     
     // Compteur d'erreurs par code
-    uint32_t errorCounts[static_cast<int>(ErrorCode::TASK_CREATION_ERROR) + 1];
+    uint32_t errorCounts[static_cast<int>(ErrorCode::CRITICAL) + 1];
     
     // Callback pour les erreurs critiques
     void (*criticalErrorCallback)(const ErrorDetails& error);
@@ -115,7 +78,7 @@ private:
     ErrorManager();
     
     // Stratégies de récupération pour chaque code d'erreur
-    RecoveryStrategy recoveryStrategies[static_cast<int>(ErrorCode::TASK_CREATION_ERROR) + 1];
+    RecoveryStrategy recoveryStrategies[static_cast<int>(ErrorCode::CRITICAL) + 1];
 
     std::map<ErrorCode, std::string> errorMessages;
 

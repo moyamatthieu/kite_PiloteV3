@@ -1,14 +1,10 @@
 /*
   -----------------------
-  Kite PiloteV3 - Fichier de configuration
+  Kite PiloteV3 - Fichier de configuration globale
   -----------------------
   
-  Ce fichier regroupe toutes les constantes configurables et définitions de pins
-  pour faciliter la maintenance et la personnalisation du système.
-  
-  Version: 1.0.0
-  Date: 2 mai 2025
-  Auteurs: Équipe Kite PiloteV3
+  Ce fichier regroupe les constantes de configuration globales et les valeurs par défaut.
+  Les configurations spécifiques aux pilotes sont dans leurs fichiers d'en-tête respectifs (par ex., imu_driver.h).
 */
 
 #ifndef CONFIG_H
@@ -16,27 +12,62 @@
 
 #include <Arduino.h>
 
-// === CONFIGURATION HARDWARE ===
+// === CONFIGURATION GÉNÉRALE DU SYSTÈME ===
+#define SYSTEM_NAME        "Kite PiloteV3"    // Nom du système
+#define SYSTEM_VERSION     "3.0.0"            // Version du firmware
+#define SYSTEM_BUILD_DATE  __DATE__           // Date de compilation
+#define SYSTEM_BUILD_TIME  __TIME__           // Heure de compilation
 
-// Broches SDA et SCL pour bus I2C (écran LCD)
-#define I2C_SDA           21    // Broche SDA pour bus I2C (écran LCD)
-#define I2C_SCL           22    // Broche SCL pour bus I2C (écran LCD)
+// ==========================================================================
+// SYSTEM ORCHESTRATOR CONFIGURATION
+// ==========================================================================
+#ifndef SYSTEM_VERSION
+#define SYSTEM_VERSION "1.0.0-refactor" // Default system version
+#endif
 
-// Paramètres de l'écran LCD 20×4 I2C
-#define LCD_COLS          20    // Nombre de colonnes du LCD
-#define LCD_ROWS          4     // Nombre de lignes du LCD
-#define LCD_I2C_ADDR      0x27  // Adresse I2C du module LCD
+#define WDT_DEFAULT_TIMEOUT_SECONDS 10 // Watchdog Timer default timeout in seconds
 
-// Broches des potentiomètres
-#define POT_DIRECTION     34    // ADC1_CH6 : potentiomètre de direction
-#define POT_TRIM          35    // ADC1_CH7 : potentiomètre de trim
-#define POT_LENGTH        32    // ADC1_CH4 : potentiomètre longueur des lignes
+// File d'attente de messages système
+// #define SYSTEM_MESSAGE_QUEUE_SIZE 20 // Supprimé car redéfini plus bas
+// Taille de la pile pour le moniteur système
+// #define SYSTEM_MONITOR_STACK_SIZE 4096 // Supprimé car redéfini plus bas
+// Priorité du moniteur système
+// #define SYSTEM_MONITOR_PRIORITY 2 // Supprimé car redéfini plus bas
+// Intervalle de surveillance du système (ms)
+#define SYSTEM_MONITOR_INTERVAL_MS 5000
 
-// Broches des boutons
-#define BUTTON_UP_PIN     25    // Navigation haut (bouton vert)
+// Configuration des servomoteurs
+#define MAX_SERVOS_PER_DRIVER 4
+#define SERVO_DEFAULT_MIN_PULSE_WIDTH_US 500   // Largeur minimale d'impulsion (us)
+#define SERVO_DEFAULT_MAX_PULSE_WIDTH_US 2500  // Largeur maximale d'impulsion (us)
+#define SERVO_DEFAULT_MIN_ANGLE_DEG -90        // Angle minimal (degrés)
+#define SERVO_DEFAULT_MAX_ANGLE_DEG 90         // Angle maximal (degrés)
+#define SERVO_DEFAULT_NEUTRAL_ANGLE_DEG 0      // Angle neutre (degrés)
+
+// Task configuration for the system restart task
+#define CONFIG_RESTART_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE * 2)
+#define CONFIG_DEFAULT_RESTART_TASK_PRIORITY (tskIDLE_PRIORITY + 2)
+
+// === CONFIGURATION DES BROCHES PAR DÉFAUT ===
+// Ces valeurs peuvent être surchargées par des configurations spécifiques au moment de l'exécution.
+
+// --- Bus I2C ---
+#define I2C_DEFAULT_SDA_PIN           21
+#define I2C_DEFAULT_SCL_PIN           22
+
+// --- Affichage LCD (I2C) ---
+#define DISPLAY_DEFAULT_I2C_ADDRESS   0x27
+#define DISPLAY_DEFAULT_COLUMNS       20
+#define DISPLAY_DEFAULT_ROWS          4
+
+// --- Potentiomètres (ADC) ---
+#define POT_DEFAULT_DIRECTION_PIN     34    // ADC1_CH6
+#define POT_DEFAULT_TRIM_PIN          35    // ADC1_CH7
+#define POT_DEFAULT_LENGTH_PIN        32    // ADC1_CH4
 #define BUTTON_DOWN_PIN   26    // Navigation bas (bouton jaune)
 #define BUTTON_SELECT_PIN 27    // Validation / sélection (bouton rouge)
 #define BUTTON_BACK_PIN   35    // Retour / annulation (bouton bleu)
+#define BUTTON_UP_PIN     25    // Navigation haut (bouton vert)
 
 // LED indicatrice
 #define LED_PIN           2     // LED d'état principale
@@ -101,6 +132,10 @@ extern bool moduleWinchEnabled;
 #define WIFI_PASSWORD      ""               // Mot de passe WiFi
 #define SERVER_PORT        80               // Port HTTP du serveur web
 #define WIFI_TIMEOUT_MS    10000            // Durée max (ms) pour se connecter au WiFi
+#define WIFI_DEFAULT_SSID            "KitePiloteV3_AP"      // SSID par défaut en mode AP
+#define WIFI_DEFAULT_PASSWORD        "kite12345"            // Mot de passe par défaut en mode AP
+#define WIFI_DEFAULT_CHANNEL         1                      // Canal WiFi par défaut
+#define WIFI_DEFAULT_TIMEOUT_MS      30000                  // Timeout de connexion WiFi (30sec)
 
 // === CONFIGURATION INTERFACE ===
 
@@ -118,6 +153,19 @@ extern bool moduleWinchEnabled;
 #define BUTTON_GREEN      1       // Identifiant du bouton vert (navigation haut)
 #define BUTTON_RED        2       // Identifiant du bouton rouge (validation)
 #define BUTTON_YELLOW     3       // Identifiant du bouton jaune (navigation bas)
+#define BUTTON_UP         BUTTON_GREEN  // Alias pour la navigation
+#define BUTTON_DOWN       BUTTON_YELLOW // Alias pour la navigation
+#define BUTTON_BACK       BUTTON_BLUE   // Alias pour retour
+#define BUTTON_SELECT     BUTTON_RED    // Alias pour validation
+
+// Constantes pour les boutons
+#define BUTTON_DEFAULT_DEBOUNCE_MS     50     // Temps de debounce par défaut en ms
+#define BUTTON_DEFAULT_LONG_PRESS_MS   1000   // Temps pour considérer un appui long en ms
+
+// Constantes pour les potentiomètres
+#define POT_DEFAULT_ADC_MIN            0      // Valeur minimale ADC par défaut
+#define POT_DEFAULT_ADC_MAX            4095   // Valeur maximale ADC par défaut (ESP32 = 12 bits)
+#define POT_DEFAULT_SMOOTHING_FACTOR   0.2f   // Facteur de lissage par défaut (0.0-1.0)
 
 // === CONFIGURATION SYSTÈME ===
 
@@ -205,11 +253,78 @@ extern bool moduleWinchEnabled;
 #define configUSE_TRACE_FACILITY              1
 #define configUSE_STATS_FORMATTING_FUNCTIONS  1
 
+// ==========================================================================
+// ===                        TASK MANAGER CONFIG                       ===
+// ==========================================================================
+#define SYSTEM_MESSAGE_QUEUE_SIZE 10 // Taille de la file de messages système
+#define SYSTEM_MONITOR_STACK_SIZE 2048 // Taille de la pile pour la tâche de monitoring système
+#define SYSTEM_MONITOR_PRIORITY (tskIDLE_PRIORITY + 2) // Priorité de la tâche de monitoring système
+// #define SYSTEM_MONITOR_INTERVAL_MS 5000 // Supprimé car défini plus haut
+
 // === INFORMATIONS SYSTÈME ===
 
 #define SYSTEM_NAME        "Kite PiloteV3"    // Nom du système
 #define SYSTEM_VERSION     "3.0.0"            // Version du firmware
 #define SYSTEM_BUILD_DATE  __DATE__           // Date de compilation
 #define SYSTEM_BUILD_TIME  __TIME__           // Heure de compilation
+
+// ==========================================================================
+// ===                        PID CONTROLLER CONFIG                       ===
+// ==========================================================================
+#define PID_DEFAULT_KP 1.0f
+#define PID_DEFAULT_KI 0.1f
+#define PID_DEFAULT_KD 0.01f
+#define PID_DEFAULT_SETPOINT 0.0f
+#define PID_DEFAULT_MIN_OUTPUT -255.0f
+#define PID_DEFAULT_MAX_OUTPUT 255.0f
+#define PID_DEFAULT_SAMPLE_TIME_MS 10
+#define PID_DEFAULT_INTEGRAL_LIMIT 1000.0f // Default integral limit for anti-windup
+
+// ==========================================================================
+// ===                        CONTROL SERVICE CONFIG                      ===
+// ==========================================================================
+#define CONTROL_SERVICE_TASK_STACK_SIZE 4096
+#define CONTROL_SERVICE_TASK_PRIORITY TaskPriority::PRIORITY_HIGH 
+#define CONTROL_SERVICE_DEFAULT_LOOP_DELAY_MS 20 // Fréquence de la boucle de contrôle principale
+
+// Paramètres de contrôle spécifiques (exemples, à affiner)
+#define TARGET_LINE_TENSION_MIN 50.0f   // Newton
+#define TARGET_LINE_TENSION_MAX 200.0f  // Newton
+#define TARGET_ALTITUDE_MIN 30.0f     // Mètres
+#define TARGET_ALTITUDE_MAX 150.0f    // Mètres
+
+// ==========================================================================
+// ===                        ACTUATOR SERVICE CONFIG                   ===
+// ==========================================================================
+#define ACTUATOR_SERVICE_TASK_STACK_SIZE 4096
+#define ACTUATOR_SERVICE_TASK_PRIORITY TaskPriority::PRIORITY_HIGH // Priorité élevée pour une réactivité des actionneurs
+#define ACTUATOR_SERVICE_DEFAULT_LOOP_DELAY_MS 50 // Fréquence de la boucle si des mises à jour périodiques sont nécessaires
+
+// Définir des ID pour les servos si plusieurs sont utilisés et gérés par ce service
+#define SERVO_LEFT_ID 0
+#define SERVO_RIGHT_ID 1
+// #define SERVO_RUDDER_ID 2 // Exemple
+
+// Plages de commandes normalisées (exemples, peuvent être spécifiques aux drivers HAL)
+#define ACTUATOR_NORMALIZED_MIN -1.0f
+#define ACTUATOR_NORMALIZED_MAX  1.0f
+
+// Limites pour les actionneurs spécifiques (peuvent être dans les configs des drivers HAL aussi)
+// WINCH
+#define WINCH_DEFAULT_MIN_SPEED ACTUATOR_NORMALIZED_MIN // -1.0 pour dérouler max
+#define WINCH_DEFAULT_MAX_SPEED ACTUATOR_NORMALIZED_MAX // +1.0 pour enrouler max
+
+// SERVOS (angles en degrés, par exemple)
+#define SERVO_DEFAULT_MIN_ANGLE -90.0f // Degrés
+#define SERVO_DEFAULT_MAX_ANGLE  90.0f // Degrés
+#define SERVO_DEFAULT_NEUTRAL_ANGLE 0.0f   // Degrés
+
+// === CONFIGURATION TREUIL (WINCH) ===
+#define WINCH_DEFAULT_MOTOR_PIN_A 12   // Broche de contrôle A du moteur
+#define WINCH_DEFAULT_MOTOR_PIN_B 13   // Broche de contrôle B du moteur
+#define WINCH_DEFAULT_SPEED_PIN   14   // Broche PWM pour contrôle de vitesse
+#define WINCH_DEFAULT_PWM_CHANNEL 4    // Canal PWM pour le contrôle de vitesse
+
+// === CONFIGURATION TÂCHES FREERTOS ===
 
 #endif // CONFIG_H

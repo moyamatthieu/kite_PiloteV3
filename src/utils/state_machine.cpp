@@ -25,7 +25,7 @@
 */
 
 #include "utils/state_machine.h"
-#include "utils/logging.h"
+#include "core/logging.h"
 
 /**
  * Constructeur

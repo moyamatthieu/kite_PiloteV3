@@ -6,6 +6,7 @@
         "chrono": "cpp",
         "random": "cpp",
         "limits": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "typeinfo": "cpp"
     }
 }
